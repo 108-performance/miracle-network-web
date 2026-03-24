@@ -16,7 +16,7 @@ export default async function ProgramsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex justify-between items-center">
         <h1 className="text-2xl font-bold">Training Programs</h1>
         <Link
           href="/admin/training/programs/new"
@@ -29,17 +29,20 @@ export default async function ProgramsPage() {
       <div className="space-y-3">
         {programs && programs.length > 0 ? (
           programs.map((program: any) => (
-            <div
+            <Link
               key={program.id}
-              className="border p-4 rounded flex justify-between"
+              href={`/admin/training/programs/${program.id}/edit`}
+              className="block border p-4 rounded hover:bg-zinc-50 no-underline"
             >
-              <div>
-                <p className="font-semibold">{program.title}</p>
-                <p className="text-sm text-gray-500">
-                  {program.description || 'No description'}
-                </p>
+              <div className="flex justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-black">{program.title}</p>
+                  <p className="text-sm text-gray-500">
+                    {program.description || 'No description'}
+                  </p>
+                </div>
               </div>
-            </div>
+            </Link>
           ))
         ) : (
           <div className="text-gray-500">No programs yet</div>

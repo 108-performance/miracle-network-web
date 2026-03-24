@@ -16,7 +16,7 @@ export default async function WorkoutsPage() {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex justify-between">
         <h1 className="text-2xl font-bold">Workouts</h1>
 
         <Link
@@ -29,21 +29,26 @@ export default async function WorkoutsPage() {
 
       <div className="space-y-3">
         {workouts?.map((workout: any) => (
-          <div
+          <Link
             key={workout.id}
-            className="border p-4 rounded flex justify-between"
+            href={`/admin/training/workouts/${workout.id}/edit`}
+            className="block border p-4 rounded hover:bg-zinc-50 no-underline"
           >
-            <div>
-              <p className="font-semibold">{workout.title}</p>
-              <p className="text-sm text-gray-500">
-                {workout.description || 'No description'}
-              </p>
-            </div>
+            <div className="flex justify-between">
+              <div>
+                <p className="font-semibold text-black">
+                  {workout.title}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {workout.description || 'No description'}
+                </p>
+              </div>
 
-            <div className="text-sm">
-              Difficulty: {workout.difficulty_level}
+              <div className="text-sm">
+                Difficulty: {workout.difficulty_level}
+              </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
