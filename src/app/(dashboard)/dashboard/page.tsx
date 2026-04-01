@@ -77,7 +77,7 @@ export default async function DashboardPage() {
         </p>
 
         <h2 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">
-          Train. Build. Compete. Fix.
+          Train. Build. Compete. Improve.
         </h2>
 
         <p className="mt-3 max-w-2xl text-base text-zinc-300 sm:text-lg">
@@ -87,21 +87,6 @@ export default async function DashboardPage() {
 
       <div className="space-y-6">
         <section className="grid gap-4 md:grid-cols-2">
-          <a
-            href="/dashboard/train"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-lime-400"
-          >
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Train
-            </p>
-            <h3 className="mt-2 text-2xl font-bold text-white">
-              Follow Your Program
-            </h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Step-by-step development. Stay on track and build consistency.
-            </p>
-          </a>
-
           <a
             href="/dashboard/compete"
             className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-lime-400"
@@ -122,7 +107,7 @@ export default async function DashboardPage() {
             className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-lime-400"
           >
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Improve
+              Workout
             </p>
             <h3 className="mt-2 text-2xl font-bold text-white">
               Train Specific Skills
@@ -137,13 +122,28 @@ export default async function DashboardPage() {
             className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-lime-400"
           >
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Fix
+              Improve
             </p>
             <h3 className="mt-2 text-2xl font-bold text-white">
-              Fix Your Swing
+              Improve Your Swing
             </h3>
             <p className="mt-2 text-sm text-zinc-400">
               Identify issues and get targeted drills to improve fast.
+            </p>
+          </a>
+
+          <a
+            href="/dashboard/train"
+            className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-lime-400"
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Train
+            </p>
+            <h3 className="mt-2 text-2xl font-bold text-white">
+              Follow Your Program
+            </h3>
+            <p className="mt-2 text-sm text-zinc-400">
+              Step-by-step development. Stay on track and build consistency.
             </p>
           </a>
         </section>
