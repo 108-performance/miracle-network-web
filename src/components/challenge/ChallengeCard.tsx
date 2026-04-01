@@ -53,7 +53,7 @@ export default function ChallengeCard({
         {streakCount}-day streak — keep it alive
       </div>
 
-      <SessionCTA label={ctaLabel} href={ctaHref} />
+      <SessionCTA label="Continue Challenge" href={ctaHref} />
     </section>
   );
 }

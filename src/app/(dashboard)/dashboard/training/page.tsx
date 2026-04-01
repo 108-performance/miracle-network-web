@@ -100,7 +100,11 @@ export default async function TrainingPage() {
       .order('day_order', { ascending: true });
 
     if (workoutsError) {
-      console.error('Error loading workouts for program:', program.id, workoutsError);
+      console.error(
+        'Error loading workouts for program:',
+        program.id,
+        workoutsError
+      );
       continue;
     }
 
@@ -169,47 +173,72 @@ export default async function TrainingPage() {
     workoutCards.find((workout) => workout.current) ?? workoutCards[0] ?? null;
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 bg-black px-6 py-8 text-white">
-      <section className="rounded-[28px] border border-red-500/40 bg-[radial-gradient(circle_at_top,_rgba(220,38,38,0.18),_rgba(0,0,0,0.96)_60%)] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-        <Link
-          href="/dashboard"
-          className="mb-5 inline-block text-sm font-semibold text-zinc-300 no-underline"
-        >
-          ← Back to Dashboard
-        </Link>
+    <main className="mx-auto max-w-5xl space-y-6 bg-black px-6 py-8 text-white">
+      {currentWorkout ? (
+        <section className="rounded-[28px] border border-lime-400/40 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.18),_rgba(0,0,0,0.96)_60%)] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
+            Continue Training
+          </p>
 
-        <div className="flex items-start justify-between gap-4">
+          <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-5xl">
+            Day {currentWorkout.day_order ?? 1} —{' '}
+            {currentWorkout.title ?? 'Training Session'}
+          </h1>
+
+          <p className="mt-3 text-lg text-zinc-300">
+            {currentWorkout.subtitle}
+          </p>
+
+          <p className="mt-2 max-w-2xl text-sm text-zinc-400 sm:text-base">
+            {currentWorkout.description ??
+              'Continue your progression and stay in sequence.'}
+          </p>
+
+          <Link
+            href={`/dashboard/training/${currentWorkout.id}`}
+            className="mt-6 inline-block rounded-2xl bg-lime-400 px-6 py-4 text-lg font-bold text-black no-underline transition hover:bg-lime-300"
+          >
+            Continue Session
+          </Link>
+        </section>
+      ) : null}
+
+      <section className="mt-2 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
+            <Link
+              href="/dashboard"
+              className="inline-block text-sm font-semibold text-zinc-300 no-underline"
+            >
+              ← Back to Dashboard
+            </Link>
+
+            <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
               Active Program
             </p>
 
-            <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-5xl">
+            <h2 className="mt-2 text-2xl font-bold text-white">
               {activeProgram.title ?? 'Training Program'}
-            </h1>
+            </h2>
 
-            <p className="mt-3 max-w-2xl text-sm text-zinc-300 sm:text-lg">
+            <p className="mt-2 text-sm text-zinc-400">
               {activeProgram.description ??
-                'Move day by day, stay in sequence, and unlock the next session by finishing today.'}
+                'Move day by day, stay in sequence, and keep progressing.'}
             </p>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
-                Athlete: {athleteName}
-              </span>
-              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
-                Program: {workouts.length} days
-              </span>
-              {currentWorkout ? (
-                <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
-                  Current: {currentWorkout.title ?? 'Day 1'}
-                </span>
-              ) : null}
-            </div>
           </div>
 
-          <div className="hidden text-7xl font-black text-red-500/10 sm:block">
-            {workouts.length}
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
+              Athlete: {athleteName}
+            </span>
+            <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
+              Program: {workouts.length} days
+            </span>
+            {currentWorkout ? (
+              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
+                Current: {currentWorkout.title ?? 'Day 1'}
+              </span>
+            ) : null}
           </div>
         </div>
       </section>
@@ -234,12 +263,12 @@ export default async function TrainingPage() {
               <div
                 className={`rounded-3xl border p-5 transition ${
                   workout.current
-                    ? 'border-lime-400/60 bg-zinc-950 shadow-[0_0_0_1px_rgba(132,204,22,0.12)]'
+                    ? 'scale-[1.01] border-lime-400/80 bg-zinc-950 shadow-[0_0_0_1px_rgba(132,204,22,0.12)]'
                     : workout.completed
-                    ? 'border-blue-500/30 bg-zinc-950'
-                    : workout.unlocked
-                    ? 'border-zinc-700 bg-zinc-950'
-                    : 'border-zinc-800 bg-zinc-950/70 opacity-70'
+                      ? 'border-blue-500/30 bg-zinc-950'
+                      : workout.unlocked
+                        ? 'border-zinc-700 bg-zinc-950'
+                        : 'border-zinc-800 bg-zinc-950/70 opacity-70'
                 }`}
               >
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -249,8 +278,8 @@ export default async function TrainingPage() {
                         workout.current
                           ? 'text-lime-400'
                           : workout.completed
-                          ? 'text-blue-400'
-                          : 'text-zinc-500'
+                            ? 'text-blue-400'
+                            : 'text-zinc-500'
                       }`}
                     >
                       {dayLabel}
@@ -293,8 +322,8 @@ export default async function TrainingPage() {
                       {workout.completed
                         ? 'Review session'
                         : workout.unlocked
-                        ? 'Start when ready'
-                        : 'Complete the previous day'}
+                          ? 'Start when ready'
+                          : 'Complete the previous day'}
                     </span>
                   </div>
                 </div>

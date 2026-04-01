@@ -76,6 +76,10 @@ type ContentPost = {
   exercise_id: string | null;
   external_url: string | null;
   file_url: string | null;
+  short_text: string | null;
+  is_primary: boolean | null;
+  sort_order: number | null;
+  thumbnail_url: string | null;
   created_at: string | null;
 };
 
@@ -215,6 +219,7 @@ function ContentCard({
     content.content_type === 'image' || content.content_type === 'gif';
   const isPdf = content.content_type === 'pdf';
   const isVideo = content.content_type === 'video';
+  const videoHref = content.external_url || content.file_url;
 
   return (
     <div
@@ -227,7 +232,9 @@ function ContentCard({
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
             {content.content_type}
           </p>
-          <h3 className={`${compact ? 'mt-1 text-base' : 'mt-2 text-lg'} font-semibold text-white`}>
+          <h3
+            className={`${compact ? 'mt-1 text-base' : 'mt-2 text-lg'} font-semibold text-white`}
+          >
             {content.title ?? 'Untitled Content'}
           </h3>
           {content.description ? (
@@ -246,10 +253,10 @@ function ContentCard({
         </div>
       ) : null}
 
-      {isVideo && content.external_url ? (
+      {isVideo && videoHref ? (
         <div className="mt-4">
           <a
-            href={content.external_url}
+            href={videoHref}
             target="_blank"
             rel="noreferrer"
             className="inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black no-underline"
@@ -284,31 +291,43 @@ function ExercisePreviewCard({
   exerciseContent,
 }: {
   item: WorkoutExercise;
-  exerciseContent: ContentPost[];
+  exerciseContent: ContentPost | null;
 }) {
   const exercise = getExerciseRecord(item.exercise);
 
   if (!exercise) return null;
 
+  const demoHref = exerciseContent?.external_url || exerciseContent?.file_url;
+
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
       <h3 className="text-lg font-semibold text-white">{exercise.name}</h3>
+
       <p className="mt-2 text-sm font-medium text-zinc-400">
         {formatPrescription(item)}
       </p>
-      {item.notes ? (
-        <p className="mt-3 text-sm text-zinc-300">{item.notes}</p>
+
+      {exerciseContent?.short_text ? (
+        <p className="mt-3 text-sm font-semibold text-lime-400">
+          {exerciseContent.short_text}
+        </p>
       ) : null}
 
-      {exerciseContent.length > 0 ? (
-        <div className="mt-4 space-y-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-400">
-            Drill Demo
-          </p>
-          {exerciseContent.map((content) => (
-            <ContentCard key={content.id} content={content} compact />
-          ))}
+      {demoHref ? (
+        <div className="mt-4">
+          <a
+            href={demoHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black no-underline"
+          >
+            Watch Demo
+          </a>
         </div>
+      ) : null}
+
+      {item.notes ? (
+        <p className="mt-3 text-sm text-zinc-300">{item.notes}</p>
       ) : null}
     </div>
   );
@@ -394,9 +413,11 @@ export default async function WorkoutDetailPage({
   const previousWorkout =
     currentIndex > 0 ? programWorkouts[currentIndex - 1] : null;
 
-  const isUnlocked =
-    currentIndex <= 0 ||
-    (previousWorkout ? completedWorkoutIds.includes(previousWorkout.id) : true);
+  const previousCompleted = previousWorkout
+    ? completedWorkoutIds.includes(previousWorkout.id)
+    : true;
+
+  const isLocked = currentIndex > 0 && !previousCompleted;
 
   const nextWorkout =
     currentIndex >= 0 && currentIndex < programWorkouts.length - 1
@@ -436,7 +457,7 @@ export default async function WorkoutDetailPage({
   const { data: contentPostsData, error: contentError } = await supabase
     .from('content_posts')
     .select(
-      'id, title, description, content_type, status, audience, training_program_id, workout_id, exercise_id, external_url, file_url, created_at'
+      'id, title, description, content_type, status, audience, training_program_id, workout_id, exercise_id, external_url, file_url, short_text, is_primary, sort_order, thumbnail_url, created_at'
     )
     .eq('status', 'published')
     .in('audience', ['athletes', 'both'])
@@ -446,11 +467,14 @@ export default async function WorkoutDetailPage({
         workout.training_program_id
           ? `training_program_id.eq.${workout.training_program_id}`
           : null,
-        exerciseIds.length > 0 ? `exercise_id.in.(${exerciseIds.join(',')})` : null,
+        exerciseIds.length > 0
+          ? `exercise_id.in.(${exerciseIds.join(',')})`
+          : null,
       ]
         .filter(Boolean)
         .join(',')
     )
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false });
 
   if (contentError) {
@@ -463,15 +487,18 @@ export default async function WorkoutDetailPage({
     (content) => content.workout_id === workout.id
   );
 
-  const exerciseContentById = exerciseIds.reduce<Record<string, ContentPost[]>>(
-    (acc, exerciseId) => {
-      acc[exerciseId] = contentPosts.filter(
-        (content) => content.exercise_id === exerciseId
-      );
-      return acc;
-    },
-    {}
-  );
+  const exerciseContentById =
+    exerciseIds.reduce<Record<string, ContentPost | null>>(
+      (acc, exerciseId) => {
+        const contentForExercise =
+          contentPosts.find((content) => content.exercise_id === exerciseId) ??
+          null;
+
+        acc[exerciseId] = contentForExercise;
+        return acc;
+      },
+      {}
+    );
 
   const programLevelContent = contentPosts.filter(
     (content) =>
@@ -523,43 +550,6 @@ export default async function WorkoutDetailPage({
       return progression?.last?.completed === true;
     });
 
-  if (!isUnlocked) {
-    return (
-      <main className="mx-auto max-w-4xl space-y-8 bg-black px-6 py-8 text-white">
-        <section className="rounded-[28px] border border-zinc-800 bg-zinc-950 p-8 text-center">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">
-            Session Locked
-          </p>
-
-          <h1 className="mt-3 text-3xl font-extrabold text-white sm:text-4xl">
-            Complete the previous day first
-          </h1>
-
-          <p className="mx-auto mt-4 max-w-xl text-zinc-400">
-            This session unlocks after you finish the day before it. Stay in
-            sequence and keep stacking wins.
-          </p>
-
-          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-            <Link
-              href="/dashboard"
-              className="inline-block rounded-xl bg-white px-6 py-3 font-semibold text-black no-underline"
-            >
-              Back to Dashboard
-            </Link>
-
-            <Link
-              href="/dashboard/training"
-              className="inline-block rounded-xl border border-zinc-700 px-6 py-3 font-semibold text-zinc-200 no-underline"
-            >
-              View Training
-            </Link>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="mx-auto max-w-5xl space-y-8 bg-black px-6 py-8 text-white">
       <section className="rounded-[28px] border border-red-500/40 bg-[radial-gradient(circle_at_top,_rgba(220,38,38,0.18),_rgba(0,0,0,0.96)_60%)] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
@@ -608,46 +598,39 @@ export default async function WorkoutDetailPage({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-          Athlete Intel
-        </p>
-
-        <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-4">
-          <div className="mb-4 flex h-48 items-center justify-center rounded-xl bg-zinc-800">
-            <span className="text-sm font-medium text-zinc-500">
-              Video coming soon
-            </span>
-          </div>
-
-          <h2 className="text-xl font-bold text-white">Watch This First</h2>
-          <p className="mt-2 text-sm text-zinc-300">
-            {workout.description ?? 'Start here and lock in the focus for today.'}
+      {isLocked ? (
+        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
+            Recommended sequence
           </p>
-        </div>
-      </section>
+          <p className="mt-2 text-sm text-zinc-200">
+            You have not completed the previous day yet, but you can still view
+            and complete this session.
+          </p>
+        </section>
+      ) : null}
 
-      {workoutLevelContent.length > 0 ? (
-        <section className="space-y-4">
+      {workoutLevelContent.length > 0 && (
+        <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Workout Content
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-400">
+              Athlete Intel
             </p>
             <h2 className="mt-2 text-2xl font-bold text-white">
-              Today’s session guidance
+              Watch This First
             </h2>
             <p className="mt-2 text-sm text-zinc-400">
-              Review the session-specific coaching before you begin.
+              Lock in the focus for today’s session before you begin.
             </p>
           </div>
 
-          <div className="grid gap-4">
-            {workoutLevelContent.map((content) => (
+          <div className="mt-6 space-y-4">
+            {workoutLevelContent.slice(0, 1).map((content) => (
               <ContentCard key={content.id} content={content} />
             ))}
           </div>
         </section>
-      ) : null}
+      )}
 
       <section id="session-flow" className="space-y-4">
         <div>
@@ -664,7 +647,7 @@ export default async function WorkoutDetailPage({
             <ExercisePreviewCard
               key={item.id}
               item={item}
-              exerciseContent={exerciseContentById[item.exercise_id] ?? []}
+              exerciseContent={exerciseContentById[item.exercise_id] ?? null}
             />
           ))}
         </div>
@@ -685,7 +668,7 @@ export default async function WorkoutDetailPage({
             <ExercisePreviewCard
               key={item.id}
               item={item}
-              exerciseContent={exerciseContentById[item.exercise_id] ?? []}
+              exerciseContent={exerciseContentById[item.exercise_id] ?? null}
             />
           ))}
         </div>

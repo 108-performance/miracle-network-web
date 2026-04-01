@@ -24,6 +24,11 @@ type ComparableExerciseLog = {
   actual_exit_velocity: number | null;
 };
 
+type WorkoutRow = {
+  id: string;
+  day_order: number | null;
+};
+
 function getPrimaryMetric(payload: {
   actualReps: number | null;
   actualTimeSeconds: number | null;
@@ -115,6 +120,21 @@ export async function POST(req: Request) {
     }
 
     const supabase = await createClient();
+
+    const { data: workout, error: workoutError } = await supabase
+      .from('workouts')
+      .select('id, training_program_id, day_order')
+      .eq('id', workoutId)
+      .single();
+
+    if (workoutError || !workout) {
+      console.error('Error loading workout:', workoutError);
+
+      return NextResponse.json(
+        { error: workoutError?.message ?? 'Failed to load workout' },
+        { status: 500 }
+      );
+    }
 
     const { data: workoutExerciseRows, error: workoutExercisesError } =
       await supabase
@@ -316,10 +336,85 @@ export async function POST(req: Request) {
       improvedCount: exerciseFeedback.filter((item) => item.improved).length,
     };
 
+    let nextWorkoutId: string | null = null;
+
+    if (allRequiredCompleted && workout.training_program_id) {
+      const { data: programWorkouts, error: programWorkoutsError } =
+        await supabase
+          .from('workouts')
+          .select('id, day_order')
+          .eq('training_program_id', workout.training_program_id)
+          .order('day_order', { ascending: true });
+
+      if (programWorkoutsError) {
+        console.error(
+          'Error loading program workouts for next workout logic:',
+          programWorkoutsError
+        );
+      } else {
+        const orderedProgramWorkouts = (programWorkouts ?? []) as WorkoutRow[];
+
+        const playableWorkoutIds = orderedProgramWorkouts.map((w) => w.id);
+
+        const { data: workoutExerciseCounts, error: workoutExerciseCountsError } =
+          playableWorkoutIds.length > 0
+            ? await supabase
+                .from('workout_exercises')
+                .select('workout_id')
+                .in('workout_id', playableWorkoutIds)
+            : { data: [], error: null };
+
+        if (workoutExerciseCountsError) {
+          console.error(
+            'Error loading workout exercise rows for next workout logic:',
+            workoutExerciseCountsError
+          );
+        } else {
+          const populatedWorkoutIds = new Set(
+            (workoutExerciseCounts ?? []).map((row) => row.workout_id)
+          );
+
+          const playableWorkouts = orderedProgramWorkouts.filter((w) =>
+            populatedWorkoutIds.has(w.id)
+          );
+
+          const { data: completedLogsForProgram, error: completedLogsError } =
+            playableWorkoutIds.length > 0
+              ? await supabase
+                  .from('workout_logs')
+                  .select('workout_id, completed_at')
+                  .eq('athlete_id', athleteId)
+                  .not('completed_at', 'is', null)
+                  .in('workout_id', playableWorkoutIds)
+              : { data: [], error: null };
+
+          if (completedLogsError) {
+            console.error(
+              'Error loading completed workout logs for next workout logic:',
+              completedLogsError
+            );
+          } else {
+            const completedWorkoutIds = new Set(
+              (completedLogsForProgram ?? []).map((log) => log.workout_id)
+            );
+
+            completedWorkoutIds.add(workoutId);
+
+            const firstIncomplete = playableWorkouts.find(
+              (programWorkout) => !completedWorkoutIds.has(programWorkout.id)
+            );
+
+            nextWorkoutId = firstIncomplete?.id ?? null;
+          }
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       workoutLogId: workoutLog.id,
       workoutCompleted: allRequiredCompleted,
+      nextWorkoutId,
       summary,
       exerciseFeedback,
     });

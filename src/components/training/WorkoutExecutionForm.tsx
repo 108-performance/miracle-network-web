@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 type ExerciseRecord = {
   id: string;
@@ -70,6 +71,12 @@ function getExerciseRecord(
   return Array.isArray(exercise) ? exercise[0] ?? null : exercise;
 }
 
+function isChallengeExercise(item: WorkoutExercise): boolean {
+  const exercise = getExerciseRecord(item.exercise);
+  const name = exercise?.name ?? '';
+  return name.toUpperCase().startsWith('CHALLENGE:');
+}
+
 function toNumberOrNull(value: string): number | null {
   if (!value.trim()) return null;
   const parsed = Number(value);
@@ -135,20 +142,20 @@ function getInitialState(
       last?.actual_sets != null
         ? String(last.actual_sets)
         : item.prescribed_sets != null
-        ? String(item.prescribed_sets)
-        : '',
+          ? String(item.prescribed_sets)
+          : '',
     actualReps:
       last?.actual_reps != null
         ? String(last.actual_reps)
         : item.prescribed_reps != null && item.metric_type === 'reps'
-        ? String(item.prescribed_reps)
-        : '',
+          ? String(item.prescribed_reps)
+          : '',
     actualTimeSeconds:
       last?.actual_time_seconds != null
         ? String(last.actual_time_seconds)
         : item.prescribed_time_seconds != null && item.metric_type === 'time'
-        ? String(item.prescribed_time_seconds)
-        : '',
+          ? String(item.prescribed_time_seconds)
+          : '',
     actualScore:
       last?.actual_score != null ? String(last.actual_score) : '',
     actualExitVelocity:
@@ -163,6 +170,8 @@ export default function WorkoutExecutionForm({
   workoutExercises,
   progressionByExerciseId,
 }: Props) {
+  const router = useRouter();
+
   const initialState = useMemo(() => {
     if (!Array.isArray(workoutExercises)) return {};
 
@@ -180,19 +189,16 @@ export default function WorkoutExecutionForm({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusType, setStatusType] = useState<'success' | 'error' | null>(null);
 
-  const buildExercises = Array.isArray(workoutExercises)
-    ? workoutExercises.filter((item) => item.sort_order <= 2)
-    : [];
-
-  const applyExercises = Array.isArray(workoutExercises)
-    ? workoutExercises.filter(
-        (item) => item.sort_order > 2 && item.sort_order <= 4
-      )
-    : [];
-
   const challengeExercise = Array.isArray(workoutExercises)
-    ? workoutExercises.find((item) => item.sort_order === 5) ?? null
+    ? workoutExercises.find((item) => isChallengeExercise(item)) ?? null
     : null;
+
+  const standardExercises = Array.isArray(workoutExercises)
+    ? workoutExercises.filter((item) => !isChallengeExercise(item))
+    : [];
+
+  const buildExercises = standardExercises.slice(0, 2);
+  const applyExercises = standardExercises.slice(2);
 
   function updateExerciseState(
     workoutExerciseId: string,
@@ -256,12 +262,24 @@ export default function WorkoutExecutionForm({
       if (data.workoutCompleted) {
         setStatusType('success');
         setStatusMessage('Day complete. Nice work.');
-      } else {
-        setStatusType('success');
-        setStatusMessage('Session progress saved.');
+
+        const nextWorkoutId =
+          typeof data.nextWorkoutId === 'string' ? data.nextWorkoutId : null;
+
+        if (nextWorkoutId) {
+          router.push(`/dashboard/training/${nextWorkoutId}`);
+          router.refresh();
+          return;
+        }
+
+        router.push('/dashboard');
+        router.refresh();
+        return;
       }
 
-      window.location.reload();
+      setStatusType('success');
+      setStatusMessage('Session progress saved.');
+      router.refresh();
     } catch (error) {
       setStatusType('error');
       setStatusMessage(
@@ -349,8 +367,8 @@ export default function WorkoutExecutionForm({
               item.metric_type === 'time'
                 ? state.actualTimeSeconds
                 : item.metric_type === 'exit_velocity'
-                ? state.actualExitVelocity
-                : state.actualReps
+                  ? state.actualExitVelocity
+                  : state.actualReps
             }
             onChange={(e) => {
               const value = e.target.value;
@@ -463,35 +481,39 @@ export default function WorkoutExecutionForm({
 
   return (
     <div className="space-y-8">
-      <section className="space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Build
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-white">
-            Build the movement pattern
-          </h2>
-        </div>
+      {buildExercises.length > 0 ? (
+        <section className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Build
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-white">
+              Build the movement pattern
+            </h2>
+          </div>
 
-        <div className="space-y-4">
-          {buildExercises.map((item) => renderDrillCard(item))}
-        </div>
-      </section>
+          <div className="space-y-4">
+            {buildExercises.map((item) => renderDrillCard(item))}
+          </div>
+        </section>
+      ) : null}
 
-      <section className="space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Apply
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-white">
-            Transfer it into the swing
-          </h2>
-        </div>
+      {applyExercises.length > 0 ? (
+        <section className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Apply
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-white">
+              Transfer it into the swing
+            </h2>
+          </div>
 
-        <div className="space-y-4">
-          {applyExercises.map((item) => renderDrillCard(item))}
-        </div>
-      </section>
+          <div className="space-y-4">
+            {applyExercises.map((item) => renderDrillCard(item))}
+          </div>
+        </section>
+      ) : null}
 
       {challengeExercise ? (
         <section className="space-y-4">
