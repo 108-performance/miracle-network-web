@@ -6,6 +6,8 @@ type DashboardLayoutProps = {
   children: React.ReactNode;
 };
 
+const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
+
 export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
@@ -18,7 +20,7 @@ export default async function DashboardLayout({
   const { data: challengeProgram } = await supabase
     .from('training_programs')
     .select('id')
-    .eq('id', 'ad7376ba-9746-4c1b-b11d-d7ba245add79')
+    .eq('id', CHALLENGE_PROGRAM_ID)
     .maybeSingle();
 
   let firstWorkoutId: string | null = null;
