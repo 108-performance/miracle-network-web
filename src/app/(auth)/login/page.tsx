@@ -12,6 +12,8 @@ function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const nextPath = useMemo(() => {
     const next = searchParams.get('next');
@@ -24,6 +26,8 @@ function LoginPageContent() {
 
   const handleLogin = async () => {
     setLoading(true);
+    setErrorMessage('');
+    setMessage('');
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -33,7 +37,7 @@ function LoginPageContent() {
     setLoading(false);
 
     if (error) {
-      alert(error.message);
+      setErrorMessage(error.message);
       return;
     }
 
@@ -43,8 +47,10 @@ function LoginPageContent() {
 
   const handleSignup = async () => {
     setLoading(true);
+    setErrorMessage('');
+    setMessage('');
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -52,7 +58,15 @@ function LoginPageContent() {
     setLoading(false);
 
     if (error) {
-      alert(error.message);
+      setErrorMessage(error.message);
+      return;
+    }
+
+    // 🔥 KEY LOGIC: detect email confirmation flow
+    if (!data.session) {
+      setMessage(
+        'Check your email to confirm your account. After confirming, return here and log in to save your session.'
+      );
       return;
     }
 
@@ -99,6 +113,20 @@ function LoginPageContent() {
               className="w-full rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-4 text-white outline-none placeholder:text-zinc-500"
             />
           </div>
+
+          {/* ✅ SUCCESS MESSAGE */}
+          {message ? (
+            <div className="mt-6 rounded-2xl border border-lime-400/30 bg-lime-400/10 px-4 py-4 text-sm text-lime-300">
+              {message}
+            </div>
+          ) : null}
+
+          {/* ❌ ERROR MESSAGE */}
+          {errorMessage ? (
+            <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-4 text-sm text-red-300">
+              {errorMessage}
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-4 pb-4">
