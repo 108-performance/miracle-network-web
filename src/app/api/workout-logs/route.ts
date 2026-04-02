@@ -166,15 +166,12 @@ export async function POST(req: Request) {
       .filter((exercise) => exercise.completed)
       .map((exercise) => exercise.workoutExerciseId);
 
-    const allRequiredCompleted =
-      requiredWorkoutExerciseIds.length > 0 &&
-      requiredWorkoutExerciseIds.every((requiredId) =>
-        completedWorkoutExerciseIds.includes(requiredId)
-      );
-
-    const workoutCompletedAt = allRequiredCompleted
-      ? new Date().toISOString()
-      : null;
+    // MVP behavior fix:
+    // when the athlete taps "Finish Session", mark the workout as completed.
+    // this keeps dashboard intelligence, challenge progression, and retention
+    // behavior in sync during athlete testing.
+    const allRequiredCompleted = true;
+    const workoutCompletedAt = new Date().toISOString();
 
     const summaryResultValue =
       exercises.find((exercise) => exercise.actualScore != null)?.actualScore ??

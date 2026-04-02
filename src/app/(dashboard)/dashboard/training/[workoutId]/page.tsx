@@ -1,7 +1,7 @@
 import Link from 'next/link';
-import { notFound, redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import WorkoutExecutionForm from '@/components/training/WorkoutExecutionForm';
+import WorkoutRunner from '@/components/execution/WorkoutRunner';
 
 type WorkoutDetailPageProps = {
   params: Promise<{
@@ -160,179 +160,6 @@ function getExerciseRecord(
   return Array.isArray(exercise) ? exercise[0] ?? null : exercise;
 }
 
-function getAthleteFromWorkoutTitle(title: string | null): string {
-  if (!title) return 'Athlete';
-  const match = title.match(/Train Like\s+(.+)$/i);
-  return match?.[1]?.trim() || 'Athlete';
-}
-
-function getWorkoutSubtitle(title: string | null): string {
-  const athlete = getAthleteFromWorkoutTitle(title).toLowerCase();
-
-  if (athlete.includes('jordan')) return 'Pure Power and Control';
-  if (athlete.includes('aleena')) return 'Become a Ballstriker';
-  if (athlete.includes('kk')) return 'Move Fast with Intent';
-  if ((title ?? '').toLowerCase().includes('final')) return 'Challenge Day';
-
-  return 'Elite Athlete Session';
-}
-
-function formatPrescription(item: WorkoutExercise): string {
-  if (item.metric_type === 'score') {
-    return item.prescribed_score != null
-      ? `Pro Score • ${item.prescribed_score}`
-      : 'Score Challenge';
-  }
-
-  if (item.metric_type === 'time') {
-    const sets = item.prescribed_sets ? `${item.prescribed_sets} sets` : null;
-    const time =
-      item.prescribed_time_seconds != null
-        ? `${item.prescribed_time_seconds} sec`
-        : null;
-    return [sets, time].filter(Boolean).join(' • ') || 'Timed Drill';
-  }
-
-  if (item.metric_type === 'exit_velocity') {
-    const sets = item.prescribed_sets ? `${item.prescribed_sets} sets` : null;
-    const velo =
-      item.prescribed_exit_velocity != null
-        ? `${item.prescribed_exit_velocity} EV`
-        : null;
-    return [sets, velo].filter(Boolean).join(' • ') || 'Velocity Drill';
-  }
-
-  const sets = item.prescribed_sets ? `${item.prescribed_sets} sets` : null;
-  const reps = item.prescribed_reps ? `${item.prescribed_reps} reps` : null;
-
-  return [sets, reps].filter(Boolean).join(' • ') || 'Complete as prescribed';
-}
-
-function ContentCard({
-  content,
-  compact = false,
-}: {
-  content: ContentPost;
-  compact?: boolean;
-}) {
-  const isVisual =
-    content.content_type === 'image' || content.content_type === 'gif';
-  const isPdf = content.content_type === 'pdf';
-  const isVideo = content.content_type === 'video';
-  const videoHref = content.external_url || content.file_url;
-
-  return (
-    <div
-      className={`rounded-2xl border border-zinc-800 bg-zinc-950 ${
-        compact ? 'p-3' : 'p-4'
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            {content.content_type}
-          </p>
-          <h3
-            className={`${compact ? 'mt-1 text-base' : 'mt-2 text-lg'} font-semibold text-white`}
-          >
-            {content.title ?? 'Untitled Content'}
-          </h3>
-          {content.description ? (
-            <p className="mt-2 text-sm text-zinc-300">{content.description}</p>
-          ) : null}
-        </div>
-      </div>
-
-      {isVisual && content.file_url ? (
-        <div className="mt-4 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900">
-          <img
-            src={content.file_url}
-            alt={content.title ?? 'Content'}
-            className="h-auto w-full object-cover"
-          />
-        </div>
-      ) : null}
-
-      {isVideo && videoHref ? (
-        <div className="mt-4">
-          <a
-            href={videoHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black no-underline"
-          >
-            Watch Video
-          </a>
-        </div>
-      ) : null}
-
-      {isPdf && content.file_url ? (
-        <div className="mt-4">
-          <a
-            href={content.file_url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block rounded-xl border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200 no-underline"
-          >
-            Open PDF
-          </a>
-        </div>
-      ) : null}
-
-      {!content.file_url && !content.external_url ? (
-        <p className="mt-4 text-sm text-zinc-500">No media attached yet.</p>
-      ) : null}
-    </div>
-  );
-}
-
-function ExercisePreviewCard({
-  item,
-  exerciseContent,
-}: {
-  item: WorkoutExercise;
-  exerciseContent: ContentPost | null;
-}) {
-  const exercise = getExerciseRecord(item.exercise);
-
-  if (!exercise) return null;
-
-  const demoHref = exerciseContent?.external_url || exerciseContent?.file_url;
-
-  return (
-    <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-      <h3 className="text-lg font-semibold text-white">{exercise.name}</h3>
-
-      <p className="mt-2 text-sm font-medium text-zinc-400">
-        {formatPrescription(item)}
-      </p>
-
-      {exerciseContent?.short_text ? (
-        <p className="mt-3 text-sm font-semibold text-lime-400">
-          {exerciseContent.short_text}
-        </p>
-      ) : null}
-
-      {demoHref ? (
-        <div className="mt-4">
-          <a
-            href={demoHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black no-underline"
-          >
-            Watch Demo
-          </a>
-        </div>
-      ) : null}
-
-      {item.notes ? (
-        <p className="mt-3 text-sm text-zinc-300">{item.notes}</p>
-      ) : null}
-    </div>
-  );
-}
-
 export default async function WorkoutDetailPage({
   params,
 }: WorkoutDetailPageProps) {
@@ -349,35 +176,24 @@ export default async function WorkoutDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect('/login');
-  }
+  const isGuest = !user;
 
-  const { data: athlete } = await supabase
-    .from('athletes')
-    .select('id, first_name, last_name')
-    .eq('user_id', user.id)
-    .maybeSingle();
+  let athlete:
+    | {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+      }
+    | null = null;
 
-  if (!athlete) {
-    return (
-      <main className="mx-auto max-w-4xl space-y-6 bg-black px-6 py-8 text-white">
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-          <h1 className="text-2xl font-bold text-white">
-            Athlete profile missing
-          </h1>
-          <p className="mt-3 text-zinc-400">
-            This user is signed in, but no athlete profile is linked yet.
-          </p>
-          <Link
-            href="/dashboard/training"
-            className="mt-5 inline-block text-sm font-semibold text-zinc-300 no-underline"
-          >
-            ← Back to Training
-          </Link>
-        </div>
-      </main>
-    );
+  if (user) {
+    const { data } = await supabase
+      .from('athletes')
+      .select('id, first_name, last_name')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    athlete = data;
   }
 
   const { data: workout } = await supabase
@@ -391,38 +207,6 @@ export default async function WorkoutDetailPage({
   if (!workout) {
     notFound();
   }
-
-  const { data: programWorkoutsData } = await supabase
-    .from('workouts')
-    .select('id, title, day_order')
-    .eq('training_program_id', workout.training_program_id)
-    .order('day_order', { ascending: true });
-
-  const programWorkouts = programWorkoutsData ?? [];
-
-  const { data: completedWorkoutLogs } = await supabase
-    .from('workout_logs')
-    .select('workout_id, completed_at')
-    .eq('athlete_id', athlete.id)
-    .not('completed_at', 'is', null);
-
-  const completedWorkoutIds =
-    completedWorkoutLogs?.map((log) => log.workout_id) ?? [];
-
-  const currentIndex = programWorkouts.findIndex((w) => w.id === workout.id);
-  const previousWorkout =
-    currentIndex > 0 ? programWorkouts[currentIndex - 1] : null;
-
-  const previousCompleted = previousWorkout
-    ? completedWorkoutIds.includes(previousWorkout.id)
-    : true;
-
-  const isLocked = currentIndex > 0 && !previousCompleted;
-
-  const nextWorkout =
-    currentIndex >= 0 && currentIndex < programWorkouts.length - 1
-      ? programWorkouts[currentIndex + 1]
-      : null;
 
   const { data: workoutExercisesData } = await supabase
     .from('workout_exercises')
@@ -454,7 +238,7 @@ export default async function WorkoutDetailPage({
   const workoutExercises = (workoutExercisesData ?? []) as WorkoutExercise[];
   const exerciseIds = workoutExercises.map((item) => item.exercise_id);
 
-  const { data: contentPostsData, error: contentError } = await supabase
+  const { data: contentPostsData } = await supabase
     .from('content_posts')
     .select(
       'id, title, description, content_type, status, audience, training_program_id, workout_id, exercise_id, external_url, file_url, short_text, is_primary, sort_order, thumbnail_url, created_at'
@@ -477,15 +261,7 @@ export default async function WorkoutDetailPage({
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false });
 
-  if (contentError) {
-    console.error('Error loading content posts:', contentError);
-  }
-
   const contentPosts = (contentPostsData ?? []) as ContentPost[];
-
-  const workoutLevelContent = contentPosts.filter(
-    (content) => content.workout_id === workout.id
-  );
 
   const exerciseContentById =
     exerciseIds.reduce<Record<string, ContentPost | null>>(
@@ -500,16 +276,9 @@ export default async function WorkoutDetailPage({
       {}
     );
 
-  const programLevelContent = contentPosts.filter(
-    (content) =>
-      content.training_program_id === workout.training_program_id &&
-      !content.workout_id &&
-      !content.exercise_id
-  );
-
   let progressionByExerciseId: Record<string, ExerciseProgression> = {};
 
-  if (exerciseIds.length > 0) {
+  if (athlete?.id && exerciseIds.length > 0) {
     const { data: progressionRows } = await supabase
       .from('exercise_logs')
       .select(
@@ -524,326 +293,83 @@ export default async function WorkoutDetailPage({
     );
   }
 
-  const buildExercises = workoutExercises.filter((item) => item.sort_order <= 2);
-  const applyExercises = workoutExercises.filter(
-    (item) => item.sort_order > 2 && item.sort_order <= 4
-  );
-  const challengeExercise =
-    workoutExercises.find((item) => item.sort_order === 5) ?? null;
+  const runnerExercises = workoutExercises.map((item) => {
+    const exercise = getExerciseRecord(item.exercise);
+    const progression = progressionByExerciseId[item.exercise_id];
+    const content = exerciseContentById[item.exercise_id];
 
-  const athleteName =
-    `${athlete.first_name ?? ''} ${athlete.last_name ?? ''}`.trim() || 'Athlete';
-
-  const workoutAthlete = getAthleteFromWorkoutTitle(workout.title);
-  const workoutSubtitle = getWorkoutSubtitle(workout.title);
-  const dayLabel = workout.day_order ? `Day ${workout.day_order}` : 'Session';
-
-  const totalExercises = workoutExercises.length;
-  const requiredExercises = workoutExercises.filter(
-    (item) => item.is_required
-  ).length;
-
-  const isCompleted =
-    workoutExercises.length > 0 &&
-    workoutExercises.every((ex) => {
-      const progression = progressionByExerciseId[ex.exercise_id];
-      return progression?.last?.completed === true;
-    });
+    return {
+      id: item.id,
+      workoutExerciseId: item.id,
+      exerciseId: item.exercise_id,
+      name: exercise?.name ?? 'Exercise',
+      description: exercise?.description ?? null,
+      instructions: item.instructions ?? null,
+      metricType: item.metric_type ?? exercise?.default_metric_type ?? 'reps',
+      prescribedSets: item.prescribed_sets,
+      prescribedReps: item.prescribed_reps,
+      prescribedTimeSeconds: item.prescribed_time_seconds,
+      prescribedScore: item.prescribed_score,
+      prescribedExitVelocity: item.prescribed_exit_velocity,
+      prescribedYards: null,
+      lastResult: {
+        reps: progression?.last?.actual_reps ?? null,
+        timeSeconds: progression?.last?.actual_time_seconds ?? null,
+        score: progression?.last?.actual_score ?? null,
+        exitVelocity: progression?.last?.actual_exit_velocity ?? null,
+      },
+      bestResult: {
+        reps: progression?.best?.actual_reps ?? null,
+        timeSeconds: progression?.best?.actual_time_seconds ?? null,
+        score: progression?.best?.actual_score ?? null,
+        exitVelocity: progression?.best?.actual_exit_velocity ?? null,
+      },
+      content: content
+        ? [
+            {
+              title: content.title ?? 'Exercise Demo',
+              url: content.external_url || content.file_url,
+            },
+          ]
+        : [],
+    };
+  });
 
   return (
-    <main className="mx-auto max-w-5xl space-y-8 bg-black px-6 py-8 text-white">
-      <section className="rounded-[28px] border border-red-500/40 bg-[radial-gradient(circle_at_top,_rgba(220,38,38,0.18),_rgba(0,0,0,0.96)_60%)] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-        <Link
-          href="/dashboard/training"
-          className="mb-5 inline-block text-sm font-semibold text-zinc-300 no-underline"
-        >
-          ← Back to Training
-        </Link>
-
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
-              {dayLabel}
-            </p>
-
-            <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-5xl">
-              {workout.title ?? 'Untitled Workout'}
-            </h1>
-
-            <p className="mt-3 text-lg font-semibold text-red-400">
-              {workoutSubtitle}
-            </p>
-
-            <p className="mt-3 max-w-2xl text-sm text-zinc-300 sm:text-lg">
-              {workout.description ??
-                'Complete today’s session and build momentum.'}
-            </p>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
-                Athlete: {athleteName}
-              </span>
-              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
-                Session: {totalExercises} drills
-              </span>
-              <span className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1 text-xs font-semibold text-zinc-300">
-                Required: {requiredExercises}
-              </span>
-            </div>
-          </div>
-
-          <div className="hidden text-7xl font-black text-red-500/10 sm:block">
-            {workoutAthlete.charAt(0).toUpperCase()}
-          </div>
-        </div>
-      </section>
-
-      {isLocked ? (
-        <section className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">
-            Recommended sequence
-          </p>
-          <p className="mt-2 text-sm text-zinc-200">
-            You have not completed the previous day yet, but you can still view
-            and complete this session.
-          </p>
-        </section>
-      ) : null}
-
-      {workoutLevelContent.length > 0 && (
-        <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-400">
-              Athlete Intel
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              Watch This First
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Lock in the focus for today’s session before you begin.
-            </p>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            {workoutLevelContent.slice(0, 1).map((content) => (
-              <ContentCard key={content.id} content={content} />
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section id="session-flow" className="space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Build
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-white">
-            Build the movement pattern
-          </h2>
+    <main className="min-h-screen bg-black px-6 py-8 text-white">
+      <div className="mx-auto max-w-3xl">
+        <div className="mb-6">
+          <Link
+            href={
+              isGuest
+                ? '/dashboard/compete/108-athlete-challenge'
+                : '/dashboard/training'
+            }
+            className="inline-block text-sm font-semibold text-zinc-300 no-underline"
+          >
+            ← Back
+          </Link>
         </div>
 
-        <div className="space-y-3">
-          {buildExercises.map((item) => (
-            <ExercisePreviewCard
-              key={item.id}
-              item={item}
-              exerciseContent={exerciseContentById[item.exercise_id] ?? null}
-            />
-          ))}
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Apply
+        <div className="mb-6 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-400">
+            {isGuest ? 'Guest Session' : 'Workout Session'}
           </p>
-          <h2 className="mt-2 text-2xl font-bold text-white">
-            Transfer it into the swing
-          </h2>
-        </div>
-
-        <div className="space-y-3">
-          {applyExercises.map((item) => (
-            <ExercisePreviewCard
-              key={item.id}
-              item={item}
-              exerciseContent={exerciseContentById[item.exercise_id] ?? null}
-            />
-          ))}
-        </div>
-      </section>
-
-      {programLevelContent.length > 0 ? (
-        <section className="space-y-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Program Concepts
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              Broader teaching context
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              These concepts support the larger program and movement intent.
-            </p>
-          </div>
-
-          <div className="grid gap-4">
-            {programLevelContent.map((content) => (
-              <ContentCard key={content.id} content={content} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {challengeExercise ? (
-        <section className="space-y-4">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-400">
-              Compete
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              Finish with the challenge
-            </h2>
-          </div>
-
-          {!isCompleted ? (
-            <>
-              <div className="rounded-3xl border border-lime-400/50 bg-zinc-950 p-6 shadow-[0_0_0_1px_rgba(132,204,22,0.12)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                  Score Challenge
-                </p>
-
-                <h3 className="mt-2 text-3xl font-extrabold text-white">
-                  {getExerciseRecord(challengeExercise.exercise)?.name?.replace(
-                    'CHALLENGE: ',
-                    ''
-                  ) ?? 'Challenge'}
-                </h3>
-
-                <p className="mt-3 text-lg font-semibold text-lime-400">
-                  Pro Score:{' '}
-                  {challengeExercise.prescribed_score ?? 'Set your mark'}
-                </p>
-
-                {challengeExercise.notes ? (
-                  <p className="mt-3 text-sm text-zinc-300">
-                    {challengeExercise.notes}
-                  </p>
-                ) : null}
-              </div>
-
-              <Link
-                href="#session-execution"
-                className="block w-full rounded-2xl bg-lime-400 px-6 py-4 text-center text-lg font-bold text-black no-underline transition hover:bg-lime-300"
-              >
-                Start Session
-              </Link>
-            </>
-          ) : (
-            <div className="rounded-3xl border border-lime-400 bg-black p-8 text-center">
-              <h2 className="text-3xl font-extrabold text-white">
-                Day Complete
-              </h2>
-
-              <p className="mt-3 text-zinc-300">
-                Built like {workoutAthlete}.
-              </p>
-
-              <p className="mt-6 text-lg font-semibold text-lime-400">
-                Pro Score: {challengeExercise.prescribed_score ?? '--'}
-              </p>
-
-              {nextWorkout ? (
-                <p className="mt-4 text-zinc-300">
-                  Tomorrow:{' '}
-                  <span className="font-semibold text-white">
-                    {nextWorkout.title}
-                  </span>
-                </p>
-              ) : (
-                <p className="mt-4 text-zinc-300">
-                  You finished the full challenge.
-                </p>
-              )}
-
-              <div className="mt-6">
-                <Link
-                  href="/dashboard"
-                  className="inline-block rounded-xl bg-white px-6 py-3 font-semibold text-black no-underline"
-                >
-                  Back to Dashboard
-                </Link>
-              </div>
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      {!isCompleted ? (
-        <section
-          id="session-execution"
-          className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6"
-        >
-          <div className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Session Execution
-            </p>
-            <h2 className="mt-3 text-2xl font-bold text-white">
-              Log Your Session
-            </h2>
-            <p className="mt-2 text-sm text-zinc-400">
-              Enter your results drill by drill, mark them complete, and finish
-              the challenge to lock in the day.
-            </p>
-          </div>
-
-          <WorkoutExecutionForm
-            athleteId={athlete.id}
-            workoutId={workout.id}
-            workoutExercises={workoutExercises}
-            progressionByExerciseId={progressionByExerciseId}
-          />
-        </section>
-      ) : null}
-
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Session Focus
-          </p>
-          <h2 className="mt-3 text-xl font-bold text-white">
-            Move with intent
-          </h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Start with clean patterns, then build toward the finish line.
+          <h1 className="mt-2 text-3xl font-extrabold text-white">
+            {workout.title ?? 'Workout Session'}
+          </h1>
+          <p className="mt-3 text-sm text-zinc-400">
+            {workout.description ?? 'Move through one drill at a time.'}
           </p>
         </div>
 
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Progression
-          </p>
-          <h2 className="mt-3 text-xl font-bold text-white">
-            Build momentum
-          </h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Today is about stacking one clean session at a time.
-          </p>
-        </div>
-
-        <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-            Completion
-          </p>
-          <h2 className="mt-3 text-xl font-bold text-white">
-            Finish the day
-          </h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Lock in the challenge and complete the full flow before you leave.
-          </p>
-        </div>
-      </section>
+        <WorkoutRunner
+          workoutId={workout.id}
+          title={workout.title ?? 'Workout Session'}
+          exercises={runnerExercises}
+          isGuest={isGuest}
+        />
+      </div>
     </main>
   );
 }

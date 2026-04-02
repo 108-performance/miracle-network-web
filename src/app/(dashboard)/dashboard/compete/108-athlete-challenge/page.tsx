@@ -1,9 +1,9 @@
-import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 
-import ChallengeCard from '@/components/challenge/ChallengeCard';
-import WeeklyList from '@/components/challenge/WeeklyList';
-import { mapDashboardToChallengeView } from '@/lib/challenge/mapDashboardToChallengeView';
+import ProgressionCarousel, {
+  type ProgressionDay,
+} from '@/components/challenge/ProgressionCarousel';
 
 type WorkoutRow = {
   id: string;
@@ -11,6 +11,10 @@ type WorkoutRow = {
   description: string | null;
   training_program_id: string | null;
   day_order: number | null;
+};
+
+type CompletedWorkoutLogRow = {
+  workout_id: string | null;
 };
 
 const ACTIVE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
@@ -52,6 +56,11 @@ function getNextWorkout(
   return workouts[0];
 }
 
+function getDayLabel(title: string | null, dayNumber: number) {
+  if (!title) return `Day ${dayNumber}`;
+  return `Day ${dayNumber}`;
+}
+
 export default async function AthleteChallengePage() {
   const supabase = await createClient();
 
@@ -59,17 +68,19 @@ export default async function AthleteChallengePage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect('/login');
+  const isGuest = !user;
+
+  let athleteId: string | null = null;
+
+  if (user) {
+    const { data: athlete } = await supabase
+      .from('athletes')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    athleteId = athlete?.id ?? null;
   }
-
-  const { data: athlete } = await supabase
-    .from('athletes')
-    .select('id, first_name, last_name')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  const athleteId = athlete?.id ?? '00000000-0000-0000-0000-000000000000';
 
   const { data: activeProgram } = await supabase
     .from('training_programs')
@@ -89,24 +100,44 @@ export default async function AthleteChallengePage() {
     orderedWorkouts = (workoutsData ?? []) as WorkoutRow[];
   }
 
-  const { count: workoutLogCount } = await supabase
-    .from('workout_logs')
-    .select('*', { count: 'exact', head: true })
-    .eq('athlete_id', athleteId);
+  let workoutLogCount = 0;
+  let completedWorkoutIds: string[] = [];
 
-  const { data: completedWorkoutLogs } = await supabase
-    .from('workout_logs')
-    .select('workout_id')
-    .eq('athlete_id', athleteId);
+  if (athleteId) {
+    const { count } = await supabase
+      .from('workout_logs')
+      .select('*', { count: 'exact', head: true })
+      .eq('athlete_id', athleteId)
+      .not('completed_at', 'is', null);
 
-  const completedWorkoutIds =
-    completedWorkoutLogs?.map((log) => log.workout_id) ?? [];
+    workoutLogCount = count ?? 0;
+
+    const { data } = await supabase
+      .from('workout_logs')
+      .select('workout_id')
+      .eq('athlete_id', athleteId)
+      .not('completed_at', 'is', null);
+
+    completedWorkoutIds =
+      ((data ?? []) as CompletedWorkoutLogRow[])
+        .map((log) => log.workout_id)
+        .filter((id): id is string => Boolean(id)) ?? [];
+  }
 
   const completedSet = new Set(completedWorkoutIds);
   const programWorkouts = orderedWorkouts.slice(0, TOTAL_DAYS);
   const nextWorkout = getNextWorkout(programWorkouts, completedWorkoutIds);
 
-  const weeklyDays =
+  const activeWorkout = nextWorkout ?? programWorkouts[0] ?? null;
+  const activeDay = activeWorkout?.day_order ?? 1;
+  const todayRoute = activeWorkout
+    ? `/dashboard/training/${activeWorkout.id}`
+    : '/dashboard/training';
+
+  const challengeAccentName = getAthleteFromWorkoutTitle(activeWorkout?.title);
+  const challengeSubtitle = getChallengeSubtitle(challengeAccentName);
+
+  const carouselDays: ProgressionDay[] =
     programWorkouts.length > 0
       ? programWorkouts.map((workout, index) => {
           const dayNumber = workout.day_order ?? index + 1;
@@ -115,49 +146,29 @@ export default async function AthleteChallengePage() {
           const previousCompleted = previousWorkout
             ? completedSet.has(previousWorkout.id)
             : true;
-          const isUnlocked = index === 0 || previousCompleted || isCompleted;
+          const isUnlocked = isGuest
+            ? index === 0
+            : index === 0 || previousCompleted || isCompleted;
 
           return {
-            dayNumber,
-            title: workout.title ?? `Day ${dayNumber}`,
-            subtitle: isCompleted
-              ? 'Completed'
-              : isUnlocked
-                ? 'Ready to train'
-                : 'Locked',
-            completed: isCompleted,
-            unlocked: isUnlocked,
-            href: `/dashboard/training/${workout.id}`,
+            day: dayNumber,
+            label: getDayLabel(workout.title, dayNumber),
+            status: isCompleted
+              ? 'completed'
+              : workout.id === activeWorkout?.id
+                ? 'active'
+                : isUnlocked
+                  ? 'active'
+                  : 'locked',
+            href: isUnlocked ? `/dashboard/training/${workout.id}` : undefined,
           };
         })
       : Array.from({ length: TOTAL_DAYS }).map((_, index) => ({
-          dayNumber: index + 1,
-          title: `Day ${index + 1}`,
-          subtitle: index === 0 ? 'Ready to train' : 'Locked',
-          completed: false,
-          unlocked: index === 0,
-          href: undefined as string | undefined,
+          day: index + 1,
+          label: `Day ${index + 1}`,
+          status: index === 0 ? 'active' : 'locked',
+          href: index === 0 ? '/dashboard/training' : undefined,
         }));
-
-  const activeWorkout = nextWorkout ?? programWorkouts[0] ?? null;
-  const activeDay = activeWorkout?.day_order ?? 1;
-
-  const todayRoute = activeWorkout
-    ? `/dashboard/training/${activeWorkout.id}`
-    : '/dashboard/training';
-
-  const challengeAccentName = getAthleteFromWorkoutTitle(activeWorkout?.title);
-  const challengeSubtitle = getChallengeSubtitle(challengeAccentName);
-
-  const dashboardView = mapDashboardToChallengeView({
-    streakCount: workoutLogCount ?? 0,
-    activeDay,
-    totalDays: TOTAL_DAYS,
-    todayRoute,
-    challengeAccentName,
-    challengeSubtitle,
-    days: weeklyDays,
-  });
 
   return (
     <main className="mx-auto min-h-screen max-w-4xl bg-black px-6 py-8 text-white">
@@ -168,74 +179,102 @@ export default async function AthleteChallengePage() {
         <h1 className="mt-2 text-4xl font-extrabold sm:text-5xl">
           108 Athlete Challenge
         </h1>
-        <p className="mt-3 max-w-2xl text-base text-zinc-400 sm:text-lg">
-          Progress through the live challenge program and validate your
-          performance day by day.
+        <p className="mt-3 text-sm text-zinc-400">
+          {isGuest
+            ? 'Start your first session now. Save your progress after you finish.'
+            : 'Continue your challenge and keep building momentum.'}
         </p>
       </div>
 
-      <section className="mb-6 rounded-[28px] border border-lime-400/40 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.18),_rgba(0,0,0,0.96)_60%)] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
-          Today’s Challenge Session
-        </p>
+      <section className="mb-6 overflow-hidden rounded-[28px] border border-zinc-800 bg-zinc-950">
+        <div className="h-40 bg-[radial-gradient(circle_at_top_left,_rgba(132,204,22,0.22),_rgba(24,24,27,0.85)_40%,_rgba(0,0,0,1)_100%)]" />
+        <div className="-mt-10 px-6 pb-6">
+          <div className="inline-flex rounded-2xl border border-lime-400/30 bg-black/80 px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-lime-400 backdrop-blur">
+            {isGuest ? 'Start Here' : 'Today'}
+          </div>
 
-        <h2 className="mt-2 text-3xl font-extrabold text-white sm:text-4xl">
-          Day {activeDay} — {activeWorkout?.title ?? 'Training Session'}
-        </h2>
-
-        <p className="mt-3 text-base text-zinc-300 sm:text-lg">
-          {challengeSubtitle}
-        </p>
-
-        <p className="mt-2 max-w-2xl text-sm text-zinc-400 sm:text-base">
-          {activeWorkout?.description ??
-            'Start today’s guided challenge session and keep your momentum rolling.'}
-        </p>
-
-        <a
-          href={todayRoute}
-          className="mt-6 inline-block rounded-2xl bg-lime-400 px-6 py-4 text-lg font-bold text-black no-underline transition hover:bg-lime-300"
-        >
-          Start Challenge Session
-        </a>
+          <div className="mt-4">
+            <h2 className="text-3xl font-extrabold text-white sm:text-4xl">
+              Day {activeDay}
+            </h2>
+            <p className="mt-2 text-lg text-zinc-200">{challengeSubtitle}</p>
+            <p className="mt-3 max-w-2xl text-sm text-zinc-400 sm:text-base">
+              {activeWorkout?.description ??
+                'Start today’s guided challenge session and keep your momentum rolling.'}
+            </p>
+          </div>
+        </div>
       </section>
 
-      <div className="space-y-6">
-        <ChallengeCard {...dashboardView} />
-        <WeeklyList days={dashboardView.weeklyDays} />
+      <section className="mb-6 rounded-3xl border border-zinc-800 bg-zinc-950 p-5">
+        <ProgressionCarousel days={carouselDays} />
+      </section>
 
-        <section className="grid gap-4 md:grid-cols-2">
-          <a
-            href="/dashboard/compete"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-zinc-600"
-          >
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Back
-            </p>
-            <h3 className="mt-2 text-2xl font-bold text-white">
-              Return to Compete
-            </h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Go back to the compete hub and explore other challenge systems.
-            </p>
-          </a>
+      <section className="mb-8 flex items-center justify-between gap-4 rounded-3xl border border-zinc-800 bg-zinc-950 px-5 py-5">
+        <div>
+          <h3 className="text-3xl font-extrabold text-white">
+            Day {activeDay} of {TOTAL_DAYS}
+          </h3>
+          <p className="mt-2 text-sm text-zinc-400">
+            {isGuest
+              ? 'First session unlocked'
+              : `${workoutLogCount} completed • stay on track`}
+          </p>
+        </div>
 
-          <a
-            href="/dashboard"
-            className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 transition hover:border-zinc-600"
-          >
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-              Dashboard
-            </p>
-            <h3 className="mt-2 text-2xl font-bold text-white">
-              Return Home
-            </h3>
-            <p className="mt-2 text-sm text-zinc-400">
-              Go back to the main athlete dashboard.
-            </p>
-          </a>
-        </section>
-      </div>
+        <div className="rounded-full border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-200">
+          {isGuest ? 'Guest Mode' : 'On Track'}
+        </div>
+      </section>
+
+      <section className="mb-8">
+        <Link
+          href={todayRoute}
+          className="block w-full rounded-[28px] bg-lime-400 px-6 py-5 text-center text-2xl font-extrabold text-black no-underline transition-all duration-150 hover:bg-lime-300 active:scale-[0.97] active:bg-lime-500"
+        >
+          Start Challenge Session
+        </Link>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <Link
+          href="/dashboard/compete"
+          className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 no-underline transition hover:border-zinc-600"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-700 bg-black text-2xl">
+              ←
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                Compete
+              </p>
+              <h3 className="mt-1 text-2xl font-bold text-white">
+                Back to Hub
+              </h3>
+            </div>
+          </div>
+        </Link>
+
+        <Link
+          href={isGuest ? '/' : '/dashboard'}
+          className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 no-underline transition hover:border-zinc-600"
+        >
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-700 bg-black text-2xl">
+              ⌂
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                {isGuest ? 'Home' : 'Dashboard'}
+              </p>
+              <h3 className="mt-1 text-2xl font-bold text-white">
+                {isGuest ? 'Return Home' : 'Return Home'}
+              </h3>
+            </div>
+          </div>
+        </Link>
+      </section>
     </main>
   );
 }

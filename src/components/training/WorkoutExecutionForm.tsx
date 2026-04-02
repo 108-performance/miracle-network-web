@@ -214,83 +214,103 @@ export default function WorkoutExecutionForm({
   }
 
   async function handleSubmit() {
-    try {
-      setIsSaving(true);
-      setStatusMessage(null);
-      setStatusType(null);
+  try {
+    setIsSaving(true);
+    setStatusMessage(null);
+    setStatusType(null);
 
-      const exercises = workoutExercises.map((item) => {
-        const state = formState[item.id];
+    const exercises = workoutExercises.map((item) => {
+      const state = formState[item.id];
 
-        return {
-          workoutExerciseId: item.id,
-          exerciseId: item.exercise_id,
-          completed: state.completed,
-          actualSets: toNumberOrNull(state.actualSets),
-          actualReps: toNumberOrNull(state.actualReps),
-          actualTimeSeconds: toNumberOrNull(state.actualTimeSeconds),
-          actualScore: toNumberOrNull(state.actualScore),
-          actualExitVelocity: toNumberOrNull(state.actualExitVelocity),
-          notes: state.notes.trim() || null,
-        };
-      });
+      return {
+        workoutExerciseId: item.id,
+        exerciseId: item.exercise_id,
+        completed: state.completed,
+        actualSets: toNumberOrNull(state.actualSets),
+        actualReps: toNumberOrNull(state.actualReps),
+        actualTimeSeconds: toNumberOrNull(state.actualTimeSeconds),
+        actualScore: toNumberOrNull(state.actualScore),
+        actualExitVelocity: toNumberOrNull(state.actualExitVelocity),
+        notes: state.notes.trim() || null,
+      };
+    });
 
-      const response = await fetch('/api/workout-logs', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          athleteId,
-          workoutId,
-          exercises,
-        }),
-      });
+    // 👇 GUEST MODE
+    if (!athleteId) {
+      const payload = {
+        workoutId,
+        exercises,
+        completedAt: new Date().toISOString(),
+      };
 
-      const data = await response.json().catch(() => null);
+      localStorage.setItem(
+        'miracle_guest_session',
+        JSON.stringify(payload)
+      );
 
-      if (!response.ok) {
-        throw new Error(
-          data?.error || 'Unable to save session. Please try again.'
-        );
-      }
+      setStatusType('success');
+      setStatusMessage('Session complete. Save your progress.');
 
-      if (!data?.success) {
-        throw new Error(data?.error || 'Unable to save session.');
-      }
+      // redirect to login with claim route
+      window.location.href = `/login?next=/dashboard/claim-first-session?workoutId=${workoutId}`;
+      return;
+    }
 
-      if (data.workoutCompleted) {
-        setStatusType('success');
-        setStatusMessage('Day complete. Nice work.');
+    // 👇 AUTHENTICATED MODE (unchanged)
+    const response = await fetch('/api/workout-logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        athleteId,
+        workoutId,
+        exercises,
+      }),
+    });
 
-        const nextWorkoutId =
-          typeof data.nextWorkoutId === 'string' ? data.nextWorkoutId : null;
+    const data = await response.json().catch(() => null);
 
-        if (nextWorkoutId) {
-          router.push(`/dashboard/training/${nextWorkoutId}`);
-          router.refresh();
-          return;
-        }
+    if (!response.ok) {
+      throw new Error(
+        data?.error || 'Unable to save session. Please try again.'
+      );
+    }
 
-        router.push('/dashboard');
+    if (!data?.success) {
+      throw new Error(data?.error || 'Unable to save session.');
+    }
+
+    if (data.workoutCompleted) {
+      setStatusType('success');
+      setStatusMessage('Day complete. Nice work.');
+
+      const nextWorkoutId =
+        typeof data.nextWorkoutId === 'string' ? data.nextWorkoutId : null;
+
+      if (nextWorkoutId) {
+        router.push(`/dashboard/training/${nextWorkoutId}`);
         router.refresh();
         return;
       }
 
-      setStatusType('success');
-      setStatusMessage('Session progress saved.');
+      router.push('/dashboard');
       router.refresh();
-    } catch (error) {
-      setStatusType('error');
-      setStatusMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to save session. Please try again.'
-      );
-    } finally {
-      setIsSaving(false);
+      return;
     }
+
+    setStatusType('success');
+    setStatusMessage('Session progress saved.');
+    router.refresh();
+  } catch (error) {
+    setStatusType('error');
+    setStatusMessage(
+      error instanceof Error
+        ? error.message
+        : 'Unable to save session. Please try again.'
+    );
+  } finally {
+    setIsSaving(false);
   }
+}
 
   function renderInputBlock(item: WorkoutExercise) {
     const state = formState[item.id];
