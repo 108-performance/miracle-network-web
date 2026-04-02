@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
 type WorkoutRow = {
@@ -35,6 +34,8 @@ function getWorkoutSubtitle(title: string | null): string {
   return 'Elite Athlete Session';
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function TrainingPage() {
   const supabase = await createClient();
 
@@ -42,39 +43,29 @@ export default async function TrainingPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    redirect('/login');
+  const isGuest = !user;
+
+  let athlete:
+    | {
+        id: string;
+        first_name: string | null;
+        last_name: string | null;
+      }
+    | null = null;
+
+  if (user) {
+    const { data } = await supabase
+      .from('athletes')
+      .select('id, first_name, last_name')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    athlete = data;
   }
 
-  const { data: athlete } = await supabase
-    .from('athletes')
-    .select('id, first_name, last_name')
-    .eq('user_id', user.id)
-    .maybeSingle();
-
-  if (!athlete) {
-    return (
-      <main className="mx-auto max-w-5xl space-y-6 bg-black px-6 py-8 text-white">
-        <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-          <h1 className="text-3xl font-extrabold text-white">
-            Athlete profile missing
-          </h1>
-          <p className="mt-3 text-zinc-400">
-            This user is signed in, but no athlete profile is linked yet.
-          </p>
-          <Link
-            href="/dashboard"
-            className="mt-5 inline-block text-sm font-semibold text-zinc-300 no-underline"
-          >
-            ← Back to Dashboard
-          </Link>
-        </section>
-      </main>
-    );
-  }
-
-  const athleteName =
-    `${athlete.first_name ?? ''} ${athlete.last_name ?? ''}`.trim() || 'Athlete';
+  const athleteName = athlete
+    ? `${athlete.first_name ?? ''} ${athlete.last_name ?? ''}`.trim() || 'Athlete'
+    : 'Guest Athlete';
 
   const { data: programsData, error: programsError } = await supabase
     .from('training_programs')
@@ -122,10 +113,10 @@ export default async function TrainingPage() {
       <main className="mx-auto max-w-5xl space-y-6 bg-black px-6 py-8 text-white">
         <section className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
           <Link
-            href="/dashboard"
+            href={isGuest ? '/dashboard/compete/108-athlete-challenge' : '/dashboard'}
             className="inline-block text-sm font-semibold text-zinc-300 no-underline"
           >
-            ← Back to Dashboard
+            ← Back
           </Link>
 
           <h1 className="mt-4 text-3xl font-extrabold text-white">
@@ -139,23 +130,28 @@ export default async function TrainingPage() {
     );
   }
 
-  const { data: completedWorkoutLogs } = await supabase
-    .from('workout_logs')
-    .select('workout_id, completed_at')
-    .eq('athlete_id', athlete.id)
-    .not('completed_at', 'is', null);
+  let completedWorkoutIds: string[] = [];
 
-  const completedWorkoutIds =
-    completedWorkoutLogs?.map((log) => log.workout_id) ?? [];
+  if (athlete?.id) {
+    const { data: completedWorkoutLogs } = await supabase
+      .from('workout_logs')
+      .select('workout_id, completed_at')
+      .eq('athlete_id', athlete.id)
+      .not('completed_at', 'is', null);
+
+    completedWorkoutIds =
+      completedWorkoutLogs?.map((log) => log.workout_id).filter(Boolean) ?? [];
+  }
 
   const workoutCards = workouts.map((workout, index) => {
     const previousWorkout = index > 0 ? workouts[index - 1] : null;
-    const completed = completedWorkoutIds.includes(workout.id);
-    const unlocked =
-      index === 0 ||
-      (previousWorkout
-        ? completedWorkoutIds.includes(previousWorkout.id)
-        : true);
+    const completed = isGuest ? false : completedWorkoutIds.includes(workout.id);
+    const unlocked = isGuest
+      ? index === 0
+      : index === 0 ||
+        (previousWorkout
+          ? completedWorkoutIds.includes(previousWorkout.id)
+          : true);
 
     const current = unlocked && !completed;
 
@@ -177,7 +173,7 @@ export default async function TrainingPage() {
       {currentWorkout ? (
         <section className="rounded-[28px] border border-lime-400/40 bg-[radial-gradient(circle_at_top,_rgba(132,204,22,0.18),_rgba(0,0,0,0.96)_60%)] p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
-            Continue Training
+            {isGuest ? 'Start Training' : 'Continue Training'}
           </p>
 
           <h1 className="mt-2 text-3xl font-extrabold text-white sm:text-5xl">
@@ -198,7 +194,7 @@ export default async function TrainingPage() {
             href={`/dashboard/training/${currentWorkout.id}`}
             className="mt-6 inline-block rounded-2xl bg-lime-400 px-6 py-4 text-lg font-bold text-black no-underline transition hover:bg-lime-300"
           >
-            Continue Session
+            {isGuest ? 'Start First Session' : 'Continue Session'}
           </Link>
         </section>
       ) : null}
@@ -207,10 +203,10 @@ export default async function TrainingPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <Link
-              href="/dashboard"
+              href={isGuest ? '/dashboard/compete/108-athlete-challenge' : '/dashboard'}
               className="inline-block text-sm font-semibold text-zinc-300 no-underline"
             >
-              ← Back to Dashboard
+              ← Back
             </Link>
 
             <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
@@ -239,6 +235,11 @@ export default async function TrainingPage() {
                 Current: {currentWorkout.title ?? 'Day 1'}
               </span>
             ) : null}
+            {isGuest ? (
+              <span className="rounded-full border border-lime-400/30 bg-lime-400/10 px-3 py-1 text-xs font-semibold text-lime-300">
+                Guest Mode
+              </span>
+            ) : null}
           </div>
         </div>
       </section>
@@ -249,7 +250,7 @@ export default async function TrainingPage() {
             Program Progression
           </p>
           <h2 className="mt-2 text-2xl font-bold text-white">
-            Stay in sequence
+            {isGuest ? 'First session unlocked' : 'Stay in sequence'}
           </h2>
         </div>
 
@@ -322,8 +323,12 @@ export default async function TrainingPage() {
                       {workout.completed
                         ? 'Review session'
                         : workout.unlocked
-                          ? 'Start when ready'
-                          : 'Complete the previous day'}
+                          ? isGuest
+                            ? 'Start as guest'
+                            : 'Start when ready'
+                          : isGuest
+                            ? 'Unlock after account creation'
+                            : 'Complete the previous day'}
                     </span>
                   </div>
                 </div>
