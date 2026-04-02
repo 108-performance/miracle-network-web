@@ -41,7 +41,7 @@ export default async function HomePage() {
 
         <div className="space-y-4 pb-4">
           <Link
-            href="/login"
+            href="/dashboard/compete/108-athlete-challenge"
             className="flex w-full items-center justify-center rounded-2xl bg-lime-400 px-5 py-4 text-base font-bold text-black transition hover:opacity-90"
           >
             Start Today’s Session
