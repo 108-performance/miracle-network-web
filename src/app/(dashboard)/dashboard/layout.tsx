@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import SignOutButton from '@/components/SignOutButton';
+import DashboardBottomNav from '@/components/navigation/DashboardBottomNav';
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -16,8 +17,6 @@ export default async function DashboardLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  // 🔥 IMPORTANT: NO redirect('/login') anywhere
 
   const { data: challengeProgram } = await supabase
     .from('training_programs')
@@ -39,10 +38,12 @@ export default async function DashboardLayout({
     firstWorkoutId = firstWorkout?.id ?? null;
   }
 
-  const guestChallengeHref = '/dashboard/compete/108-athlete-challenge';
-  const guestTrainingHref = firstWorkoutId
+  const homeHref = '/';
+  const challengeHref = '/dashboard/compete/108-athlete-challenge';
+  const trainingHref = firstWorkoutId
     ? `/dashboard/training/${firstWorkoutId}`
     : '/dashboard/training';
+  const profileHref = user ? '/dashboard/profile' : '/login';
 
   return (
     <div style={{ minHeight: '100vh', background: '#0a0a0a', color: '#fff' }}>
@@ -90,7 +91,7 @@ export default async function DashboardLayout({
       <main
         style={{
           padding: 16,
-          paddingBottom: 96,
+          paddingBottom: 104,
         }}
       >
         {children}
@@ -106,72 +107,16 @@ export default async function DashboardLayout({
           borderTop: '1px solid rgba(255,255,255,0.08)',
           background: 'rgba(10,10,10,0.96)',
           backdropFilter: 'blur(16px)',
-          padding: '10px 12px calc(10px + env(safe-area-inset-bottom))',
+          padding: '8px 12px calc(8px + env(safe-area-inset-bottom))',
         }}
       >
-        <div
-          style={{
-            maxWidth: 520,
-            margin: '0 auto',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          <BottomNavItem href="/" label="Home" />
-
-          <BottomNavItem
-            href={guestChallengeHref}
-            label="Challenge"
-          />
-
-          <BottomNavItem
-            href={guestTrainingHref}
-            label="Train"
-          />
-
-          <BottomNavItem
-            href={user ? '/dashboard/profile' : '/login'}
-            label="Profile"
-          />
-        </div>
+        <DashboardBottomNav
+          homeHref={homeHref}
+          challengeHref={challengeHref}
+          trainingHref={trainingHref}
+          profileHref={profileHref}
+        />
       </nav>
     </div>
-  );
-}
-
-function BottomNavItem({
-  href,
-  label,
-}: {
-  href: string;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href}
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 4,
-        minHeight: 56,
-        color: 'rgba(255,255,255,0.86)',
-        textDecoration: 'none',
-        borderRadius: 16,
-      }}
-    >
-      <span
-        style={{
-          fontSize: 11,
-          lineHeight: 1,
-          color: 'rgba(255,255,255,0.62)',
-        }}
-      >
-        {label}
-      </span>
-    </Link>
   );
 }

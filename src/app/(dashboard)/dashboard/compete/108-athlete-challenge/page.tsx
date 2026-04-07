@@ -236,42 +236,36 @@ export default async function AthleteChallengePage() {
         </Link>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="mt-2">
         <Link
           href="/dashboard/compete"
-          className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 no-underline transition hover:border-zinc-600"
+          className="group relative flex h-[140px] w-full flex-col justify-between overflow-hidden rounded-3xl border border-fuchsia-400/20 bg-zinc-950/90 p-5 text-left no-underline shadow-[0_0_24px_rgba(217,70,239,0.08)] transition-all duration-300 hover:scale-[1.01] active:scale-[0.99]"
         >
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-700 bg-black text-2xl">
-              ←
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Compete
-              </p>
-              <h3 className="mt-1 text-2xl font-bold text-white">
-                Back to Hub
-              </h3>
-            </div>
-          </div>
-        </Link>
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-white/[0.03] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
 
-        <Link
-          href={isGuest ? '/' : '/dashboard'}
-          className="group rounded-3xl border border-zinc-800 bg-zinc-950 p-5 no-underline transition hover:border-zinc-600"
-        >
-          <div className="flex items-center gap-4">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-zinc-700 bg-black text-2xl">
-              ⌂
+          <div className="relative z-10">
+            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-fuchsia-400/10 text-fuchsia-400">
+              <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5">
+                <path
+                  d="M12 4l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7L12 4Z"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                {isGuest ? 'Home' : 'Dashboard'}
-              </p>
-              <h3 className="mt-1 text-2xl font-bold text-white">
-                {isGuest ? 'Return Home' : 'Return Home'}
-              </h3>
-            </div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">
+              Compete
+            </p>
+            <h3 className="mt-2 text-2xl font-bold text-white">
+              Back to Hub
+            </h3>
+          </div>
+
+          <div className="relative z-10">
+            <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
+              Return to challenge hub
+            </span>
           </div>
         </Link>
       </section>
