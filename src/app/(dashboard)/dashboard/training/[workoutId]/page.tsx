@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import WorkoutRunner from '@/components/execution/WorkoutRunner';
@@ -184,26 +183,18 @@ function buildProgressionByExerciseId(
               log.actual_time_seconds != null && log.actual_time_seconds >= 0
           ) ?? null
         : metricType === 'score'
-        ? sorted.find(
-            (log) => log.actual_score != null && log.actual_score >= 0
-          ) ?? null
-        : metricType === 'exit_velocity'
-        ? sorted.find(
-            (log) =>
-              log.actual_exit_velocity != null &&
-              log.actual_exit_velocity >= 0
-          ) ?? null
-        : sorted.find(
-            (log) => log.actual_reps != null && log.actual_reps >= 0
-          ) ?? null;
-
-    console.log('EXERCISE PROGRESSION DEBUG', {
-      exerciseId,
-      metricType,
-      logCount: sorted.length,
-      last: lastValidLog,
-      best,
-    });
+          ? sorted.find(
+              (log) => log.actual_score != null && log.actual_score >= 0
+            ) ?? null
+          : metricType === 'exit_velocity'
+            ? sorted.find(
+                (log) =>
+                  log.actual_exit_velocity != null &&
+                  log.actual_exit_velocity >= 0
+              ) ?? null
+            : sorted.find(
+                (log) => log.actual_reps != null && log.actual_reps >= 0
+              ) ?? null;
 
     result[exerciseId] = {
       last: lastValidLog,
@@ -336,17 +327,14 @@ export default async function WorkoutDetailPage({
   const contentPosts = (contentPostsData ?? []) as ContentPost[];
 
   const exerciseContentById =
-    exerciseIds.reduce<Record<string, ContentPost | null>>(
-      (acc, exerciseId) => {
-        const contentForExercise =
-          contentPosts.find((content) => content.exercise_id === exerciseId) ??
-          null;
+    exerciseIds.reduce<Record<string, ContentPost | null>>((acc, exerciseId) => {
+      const contentForExercise =
+        contentPosts.find((content) => content.exercise_id === exerciseId) ??
+        null;
 
-        acc[exerciseId] = contentForExercise;
-        return acc;
-      },
-      {}
-    );
+      acc[exerciseId] = contentForExercise;
+      return acc;
+    }, {});
 
   let progressionByExerciseId: Record<string, ExerciseProgression> = {};
 
@@ -409,38 +397,14 @@ export default async function WorkoutDetailPage({
   });
 
   return (
-    <main className="min-h-screen bg-black px-6 py-8 text-white">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-6">
-          <Link
-            href={
-              isGuest
-                ? '/dashboard/compete/108-athlete-challenge'
-                : '/dashboard/training'
-            }
-            className="inline-block text-sm font-semibold text-zinc-300 no-underline"
-          >
-            ← Back
-          </Link>
-        </div>
-
-        <div className="mb-6 rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-lime-400">
-            {isGuest ? 'Guest Session' : 'Workout Session'}
-          </p>
-          <h1 className="mt-2 text-3xl font-extrabold text-white">
-            {workout.title ?? 'Workout Session'}
-          </h1>
-          <p className="mt-3 text-sm text-zinc-400">
-            {workout.description ?? 'Move through one drill at a time.'}
-          </p>
-        </div>
-
+    <main className="min-h-screen bg-black px-6 py-6 text-white">
+      <div className="mx-auto max-w-xl">
         <WorkoutRunner
           workoutId={workout.id}
           title={workout.title ?? 'Workout Session'}
           exercises={runnerExercises}
           isGuest={isGuest}
+          autoStart={true}
         />
       </div>
     </main>

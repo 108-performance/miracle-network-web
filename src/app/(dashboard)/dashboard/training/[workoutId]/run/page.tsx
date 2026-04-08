@@ -1,5 +1,3 @@
-// src/app/(dashboard)/dashboard/training/[workoutId]/run/page.tsx
-
 import { createClient } from '@/lib/supabase/server';
 import { notFound } from 'next/navigation';
 import WorkoutRunner from '@/components/execution/WorkoutRunner';
@@ -20,54 +18,16 @@ function buildMetricSnapshot(log: any): MetricSnapshot {
   };
 }
 
-function normalizeMetricType(metricType?: string | null) {
-  const normalized = (metricType ?? '').toLowerCase().trim();
-
-  if (
-    normalized === 'time' ||
-    normalized === 'seconds' ||
-    normalized === 'time_seconds' ||
-    normalized === 'duration'
-  ) {
-    return 'time';
-  }
-
-  if (
-    normalized === 'score' ||
-    normalized === 'points'
-  ) {
-    return 'score';
-  }
-
-  if (
-    normalized === 'exit_velocity' ||
-    normalized === 'exit velocity' ||
-    normalized === 'exit-velocity' ||
-    normalized === 'ev'
-  ) {
-    return 'exit_velocity';
-  }
-
-  if (normalized === 'mixed') {
-    return 'mixed';
-  }
-
-  return 'reps';
-}
-
 function getMetricValue(
   snapshot: MetricSnapshot | null | undefined,
   metricType?: string | null
 ) {
   if (!snapshot) return null;
 
-  const normalizedMetricType = normalizeMetricType(metricType);
-
-  if (normalizedMetricType === 'time') return snapshot.timeSeconds ?? null;
-  if (normalizedMetricType === 'score') return snapshot.score ?? null;
-  if (normalizedMetricType === 'exit_velocity') return snapshot.exitVelocity ?? null;
-
-  if (normalizedMetricType === 'mixed') {
+  if (metricType === 'time') return snapshot.timeSeconds ?? null;
+  if (metricType === 'score') return snapshot.score ?? null;
+  if (metricType === 'exit_velocity') return snapshot.exitVelocity ?? null;
+  if (metricType === 'mixed') {
     return (
       snapshot.score ??
       snapshot.exitVelocity ??
@@ -83,19 +43,17 @@ function getMetricValue(
 function pickBestLog(logs: any[], metricType?: string | null) {
   if (!logs.length) return null;
 
-  const normalizedMetricType = normalizeMetricType(metricType);
-
   const validLogs = logs.filter((log) => {
-    const value = getMetricValue(buildMetricSnapshot(log), normalizedMetricType);
+    const value = getMetricValue(buildMetricSnapshot(log), metricType);
     return value != null;
   });
 
   if (!validLogs.length) return null;
 
-  if (normalizedMetricType === 'time') {
+  if (metricType === 'time') {
     return validLogs.reduce((best, current) => {
-      const bestValue = getMetricValue(buildMetricSnapshot(best), normalizedMetricType);
-      const currentValue = getMetricValue(buildMetricSnapshot(current), normalizedMetricType);
+      const bestValue = getMetricValue(buildMetricSnapshot(best), metricType);
+      const currentValue = getMetricValue(buildMetricSnapshot(current), metricType);
 
       if (bestValue == null) return current;
       if (currentValue == null) return best;
@@ -105,8 +63,8 @@ function pickBestLog(logs: any[], metricType?: string | null) {
   }
 
   return validLogs.reduce((best, current) => {
-    const bestValue = getMetricValue(buildMetricSnapshot(best), normalizedMetricType);
-    const currentValue = getMetricValue(buildMetricSnapshot(current), normalizedMetricType);
+    const bestValue = getMetricValue(buildMetricSnapshot(best), metricType);
+    const currentValue = getMetricValue(buildMetricSnapshot(current), metricType);
 
     if (bestValue == null) return current;
     if (currentValue == null) return best;
@@ -192,30 +150,13 @@ export default async function RunWorkoutPage({
   }
 
   const exercises = (exercisesData ?? []).map((item: any) => {
-    const ex = Array.isArray(item.exercise)
-      ? item.exercise[0]
-      : item.exercise;
+    const ex = Array.isArray(item.exercise) ? item.exercise[0] : item.exercise;
 
-    const rawMetricType = item.metric_type ?? ex?.default_metric_type ?? 'reps';
-    const metricType = normalizeMetricType(rawMetricType);
+    const metricType = item.metric_type ?? ex?.default_metric_type ?? 'reps';
     const exerciseLogs = logsByExerciseId.get(item.exercise_id) ?? [];
 
     const lastLog = exerciseLogs[0] ?? null;
     const bestLog = pickBestLog(exerciseLogs, metricType);
-
-    console.log('EXERCISE DEBUG', {
-      exerciseName: ex?.name,
-      rawMetricType,
-      normalizedMetricType: metricType,
-      logCount: exerciseLogs.length,
-      exerciseLogs,
-      lastLog,
-      bestLog,
-      lastSnapshot: lastLog ? buildMetricSnapshot(lastLog) : null,
-      bestSnapshot: bestLog ? buildMetricSnapshot(bestLog) : null,
-      lastValue: lastLog ? getMetricValue(buildMetricSnapshot(lastLog), metricType) : null,
-      bestValue: bestLog ? getMetricValue(buildMetricSnapshot(bestLog), metricType) : null,
-    });
 
     return {
       id: item.id,
@@ -237,8 +178,8 @@ export default async function RunWorkoutPage({
   });
 
   return (
-    <main className="min-h-screen bg-black px-6 py-8 text-white">
-      <div className="mx-auto max-w-3xl">
+    <main className="min-h-screen bg-black px-6 py-6 text-white">
+      <div className="mx-auto max-w-xl">
         <WorkoutRunner
           workoutId={workout.id}
           title={workout.title ?? 'Workout'}

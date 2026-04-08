@@ -444,14 +444,6 @@ export default function WorkoutRunner({
     return 'Reps';
   }
 
-  function getPrimaryPlaceholder(metricType?: string | null) {
-    if (metricType === 'time') return 'Enter time';
-    if (metricType === 'score') return 'Enter score';
-    if (metricType === 'exit_velocity') return 'Enter exit velocity';
-    if (metricType === 'mixed') return 'Enter score';
-    return 'Enter reps';
-  }
-
   function getCurrentInputValue() {
     if (!current) return '';
     const field = getPrimaryField(current.metricType);
@@ -535,7 +527,7 @@ export default function WorkoutRunner({
 
   if (!started) {
     return (
-      <div className="mx-auto w-full max-w-2xl rounded-[32px] border border-zinc-800 bg-zinc-950 p-8 text-center">
+      <div className="mx-auto w-full max-w-xl rounded-[32px] border border-zinc-800 bg-zinc-950 p-8 text-center">
         <p className="mb-2 text-sm uppercase tracking-[0.2em] text-zinc-500">
           Workout Session
         </p>
@@ -590,7 +582,7 @@ export default function WorkoutRunner({
         </div>
 
         <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-          {currentIndex + 1} of {exercises.length}
+          {currentIndex + 1}/{exercises.length}
         </p>
       </div>
 
