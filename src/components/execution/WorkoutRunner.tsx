@@ -65,6 +65,105 @@ const EMPTY_LOG: LogState = {
 const PENDING_SESSION_COOKIE = 'mn_pending_session';
 const WORKOUT_HISTORY_STORAGE_KEY = 'mn_workout_history_v1';
 
+function extractVimeoVideoId(url: string): string | null {
+  const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  return match?.[1] ?? null;
+}
+
+function getVimeoEmbedUrl(url?: string | null): string | null {
+  if (!url) return null;
+
+  try {
+    const parsed = new URL(url);
+
+    if (
+      parsed.hostname.includes('player.vimeo.com') &&
+      parsed.pathname.includes('/video/')
+    ) {
+      const embed = new URL(parsed.toString());
+
+      embed.searchParams.set('playsinline', '1');
+      embed.searchParams.set('title', '0');
+      embed.searchParams.set('byline', '0');
+      embed.searchParams.set('portrait', '0');
+
+      return embed.toString();
+    }
+
+    if (parsed.hostname.includes('vimeo.com')) {
+      const videoId = extractVimeoVideoId(url);
+
+      if (!videoId) return null;
+
+      const embed = new URL(`https://player.vimeo.com/video/${videoId}`);
+
+      const h = parsed.searchParams.get('h');
+      if (h) {
+        embed.searchParams.set('h', h);
+      }
+
+      embed.searchParams.set('playsinline', '1');
+      embed.searchParams.set('title', '0');
+      embed.searchParams.set('byline', '0');
+      embed.searchParams.set('portrait', '0');
+
+      return embed.toString();
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function InlineVideoPlayer({
+  url,
+  title = 'Workout video',
+  className = '',
+}: {
+  url?: string | null;
+  title?: string;
+  className?: string;
+}) {
+  const embedUrl = getVimeoEmbedUrl(url);
+
+  if (!url) return null;
+
+  if (!embedUrl) {
+    return (
+      <div
+        className={`rounded-2xl border border-white/10 bg-zinc-950/90 p-4 text-center ${className}`}
+      >
+        <p className="text-sm text-zinc-400">Video available</p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
+        >
+          Open Video
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border border-white/10 bg-black ${className}`}
+    >
+      <div className="relative w-full pt-[56.25%]">
+        <iframe
+          src={embedUrl}
+          title={title}
+          className="absolute inset-0 h-full w-full"
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function WorkoutRunner({
   workoutId,
   title,
@@ -641,15 +740,8 @@ export default function WorkoutRunner({
       )}
 
       {currentContent.length > 0 && currentContent[0]?.url ? (
-        <div className="mb-10 text-center">
-          <a
-            href={currentContent[0].url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
-          >
-            View Video
-          </a>
+        <div className="mb-10">
+          <InlineVideoPlayer url={currentContent[0].url} title={current.name} />
         </div>
       ) : null}
 
