@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import { saveWorkoutSessionAction } from '@/app/(dashboard)/dashboard/workout/[elementSlug]/[levelSlug]/actions';
 
 type ExerciseContent = {
@@ -63,25 +63,34 @@ const EMPTY_LOG: LogState = {
 };
 
 const PENDING_SESSION_COOKIE = 'mn_pending_session';
+const WORKOUT_HISTORY_STORAGE_KEY = 'mn_workout_history_v1';
 
 export default function WorkoutRunner({
   workoutId,
   title,
   exercises,
   isGuest,
+  autoStart = false,
 }: {
   workoutId: string;
   title: string;
   exercises: Exercise[];
   isGuest: boolean;
+  autoStart?: boolean;
 }) {
-  const [started, setStarted] = useState(false);
+  const [started, setStarted] = useState(autoStart);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
   const [logs, setLogs] = useState<Record<string, LogState>>({});
+
+  useEffect(() => {
+    if (autoStart) {
+      setStarted(true);
+    }
+  }, [autoStart]);
 
   const current = exercises[currentIndex];
   const progressPercent =
@@ -93,6 +102,17 @@ export default function WorkoutRunner({
     if (!current?.content) return [];
     return current.content;
   }, [current]);
+
+  useEffect(() => {
+    const input = document.getElementById(
+      'runner-primary-input'
+    ) as HTMLInputElement | null;
+
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }, [currentIndex]);
 
   function updateLog(exerciseId: string, field: keyof LogState, value: string) {
     setLogs((prev) => ({
@@ -140,8 +160,234 @@ export default function WorkoutRunner({
     window.location.href = `/login?next=${encodeURIComponent(nextPath)}`;
   }
 
-  function renderPrescription() {
-    if (!current) return null;
+  function toNumberOrNull(value: string) {
+    if (!value || value.trim() === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function getMetricValueFromLog(log: LogState, metricType?: string | null) {
+    if (metricType === 'time') return toNumberOrNull(log.timeSeconds);
+    if (metricType === 'score') return toNumberOrNull(log.score);
+    if (metricType === 'exit_velocity') return toNumberOrNull(log.exitVelocity);
+    if (metricType === 'mixed') {
+      return (
+        toNumberOrNull(log.score) ??
+        toNumberOrNull(log.exitVelocity) ??
+        toNumberOrNull(log.reps) ??
+        toNumberOrNull(log.timeSeconds)
+      );
+    }
+
+    return toNumberOrNull(log.reps);
+  }
+
+  function getMetricValueFromSnapshot(
+    snapshot: MetricSnapshot | null | undefined,
+    metricType?: string | null
+  ) {
+    if (!snapshot) return null;
+    if (metricType === 'time') return snapshot.timeSeconds ?? null;
+    if (metricType === 'score') return snapshot.score ?? null;
+    if (metricType === 'exit_velocity') return snapshot.exitVelocity ?? null;
+    if (metricType === 'mixed') {
+      return (
+        snapshot.score ??
+        snapshot.exitVelocity ??
+        snapshot.reps ??
+        snapshot.timeSeconds ??
+        null
+      );
+    }
+
+    return snapshot.reps ?? null;
+  }
+
+  function formatDateKey(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  function getStartOfWeek(date: Date) {
+    const start = new Date(date);
+    const day = start.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    start.setDate(start.getDate() + diff);
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
+
+  function getStreakData() {
+    try {
+      const raw = window.localStorage.getItem(WORKOUT_HISTORY_STORAGE_KEY);
+      const history: string[] = raw ? JSON.parse(raw) : [];
+
+      const today = new Date();
+      const todayKey = formatDateKey(today);
+
+      const merged = Array.from(new Set([...history, todayKey])).sort();
+
+      window.localStorage.setItem(
+        WORKOUT_HISTORY_STORAGE_KEY,
+        JSON.stringify(merged)
+      );
+
+      const uniqueDaysDescending = [...merged].sort((a, b) => b.localeCompare(a));
+
+      let streak = 0;
+      const cursor = new Date(today);
+      cursor.setHours(0, 0, 0, 0);
+
+      for (const dayKey of uniqueDaysDescending) {
+        const expectedKey = formatDateKey(cursor);
+
+        if (dayKey === expectedKey) {
+          streak += 1;
+          cursor.setDate(cursor.getDate() - 1);
+        } else if (dayKey > expectedKey) {
+          continue;
+        } else {
+          break;
+        }
+      }
+
+      const startOfWeek = getStartOfWeek(today);
+      const weekSessions = merged.filter((dayKey) => {
+        const date = new Date(`${dayKey}T00:00:00`);
+        return date >= startOfWeek;
+      }).length;
+
+      return {
+        streak,
+        weekSessions,
+      };
+    } catch {
+      return {
+        streak: 1,
+        weekSessions: 1,
+      };
+    }
+  }
+
+  function getNextStepMeta(source: 'challenge' | 'workout', titleText: string) {
+    if (source === 'challenge') {
+      const dayMatch = titleText.match(/day\s*(\d+)/i);
+      const currentDay = dayMatch ? Number(dayMatch[1]) : null;
+      const nextDay = currentDay != null ? currentDay + 1 : null;
+
+      return {
+        nextPath: '/dashboard/compete/108-athlete-challenge',
+        nextLabel: nextDay ? `Next up: Day ${nextDay}` : 'Continue Challenge',
+        nextSubtext: nextDay
+          ? `Keep the streak alive and move into Day ${nextDay}.`
+          : 'Your next challenge session is ready.',
+        primaryLabel: 'Continue Challenge',
+      };
+    }
+
+    return {
+      nextPath: '/dashboard',
+      nextLabel: 'Next up: Return to Dashboard',
+      nextSubtext: 'Choose your next workout and keep momentum going.',
+      primaryLabel: 'Back to Dashboard',
+    };
+  }
+
+  function buildCompletionRedirectUrl() {
+    const normalizedTitle = title.toLowerCase();
+    const isChallengeSession = normalizedTitle.includes('challenge');
+    const source: 'challenge' | 'workout' = isChallengeSession
+      ? 'challenge'
+      : 'workout';
+
+    const { streak, weekSessions } = getStreakData();
+    const nextStep = getNextStepMeta(source, title);
+
+    const candidates = exercises
+      .map((exercise) => {
+        const metricType = exercise.metricType ?? 'reps';
+        const values = logs[exercise.exerciseId] ?? EMPTY_LOG;
+
+        const currentValue = getMetricValueFromLog(values, metricType);
+        const lastValue = getMetricValueFromSnapshot(
+          exercise.lastResult,
+          metricType
+        );
+        const bestValue = getMetricValueFromSnapshot(
+          exercise.bestResult,
+          metricType
+        );
+
+        const changeValue =
+          currentValue != null && lastValue != null ? currentValue - lastValue : null;
+
+        const hasData =
+          currentValue != null || lastValue != null || bestValue != null;
+
+        const improvedFromLast =
+          changeValue != null && changeValue > 0 ? 1 : 0;
+
+        const matchedBest =
+          currentValue != null &&
+          bestValue != null &&
+          currentValue === bestValue
+            ? 1
+            : 0;
+
+        const hasCurrentValue = currentValue != null ? 1 : 0;
+
+        return {
+          currentValue,
+          lastValue,
+          bestValue,
+          changeValue,
+          hasData,
+          improvedFromLast,
+          matchedBest,
+          hasCurrentValue,
+        };
+      })
+      .filter((candidate) => candidate.hasData)
+      .sort((a, b) => {
+        if (b.improvedFromLast !== a.improvedFromLast) {
+          return b.improvedFromLast - a.improvedFromLast;
+        }
+
+        if (b.matchedBest !== a.matchedBest) {
+          return b.matchedBest - a.matchedBest;
+        }
+
+        if (b.hasCurrentValue !== a.hasCurrentValue) {
+          return b.hasCurrentValue - a.hasCurrentValue;
+        }
+
+        return 0;
+      });
+
+    const anchor = candidates[0];
+
+    const params = new URLSearchParams({
+      title: title ?? 'Workout Session',
+      source,
+      today: anchor?.currentValue != null ? String(anchor.currentValue) : '',
+      best: anchor?.bestValue != null ? String(anchor.bestValue) : '',
+      last: anchor?.lastValue != null ? String(anchor.lastValue) : '',
+      change: anchor?.changeValue != null ? String(anchor.changeValue) : '',
+      streak: String(streak),
+      week: String(weekSessions),
+      next: nextStep.nextPath,
+      nextLabel: nextStep.nextLabel,
+      nextSubtext: nextStep.nextSubtext,
+      primaryLabel: nextStep.primaryLabel,
+    });
+
+    return `/dashboard/session-complete?${params.toString()}`;
+  }
+
+  function formatPrescription() {
+    if (!current) return '';
 
     const parts: string[] = [];
 
@@ -149,7 +395,7 @@ export default function WorkoutRunner({
       parts.push(`${current.prescribedSets} set${current.prescribedSets === 1 ? '' : 's'}`);
     }
 
-    if (current.metricType === 'reps' || current.metricType === 'mixed') {
+    if (current.metricType === 'reps' || current.metricType === 'mixed' || !current.metricType) {
       if (current.prescribedReps) {
         parts.push(`${current.prescribedReps} rep${current.prescribedReps === 1 ? '' : 's'}`);
       }
@@ -163,7 +409,7 @@ export default function WorkoutRunner({
 
     if (current.metricType === 'score' || current.metricType === 'mixed') {
       if (current.prescribedScore) {
-        parts.push(`target score ${current.prescribedScore}`);
+        parts.push(`target ${current.prescribedScore}`);
       }
     }
 
@@ -179,178 +425,61 @@ export default function WorkoutRunner({
       );
     }
 
-    if (parts.length === 0) return null;
-
-    return (
-      <div className="mb-6 rounded-xl border border-zinc-800 bg-black/40 p-4">
-        <p className="mb-1 text-sm uppercase tracking-[0.2em] text-zinc-500">
-          Prescription
-        </p>
-        <p className="text-zinc-300">{parts.join(' • ')}</p>
-      </div>
-    );
+    return parts.join(' • ');
   }
 
-  function renderMetricInputs() {
-    if (!current) return null;
-
-    const metricType = current.metricType ?? 'reps';
-
-    if (metricType === 'reps') {
-      return (
-        <MetricInputCard
-          label="Reps"
-          value={currentLog.reps}
-          onChange={(value) => updateLog(current.exerciseId, 'reps', value)}
-          placeholder="Enter reps"
-        />
-      );
-    }
-
-    if (metricType === 'time') {
-      return (
-        <MetricInputCard
-          label="Time (seconds)"
-          value={currentLog.timeSeconds}
-          onChange={(value) => updateLog(current.exerciseId, 'timeSeconds', value)}
-          placeholder="Enter time in seconds"
-        />
-      );
-    }
-
-    if (metricType === 'score') {
-      return (
-        <MetricInputCard
-          label="Score"
-          value={currentLog.score}
-          onChange={(value) => updateLog(current.exerciseId, 'score', value)}
-          placeholder="Enter score"
-        />
-      );
-    }
-
-    if (metricType === 'exit_velocity') {
-      return (
-        <MetricInputCard
-          label="Exit Velocity"
-          value={currentLog.exitVelocity}
-          onChange={(value) => updateLog(current.exerciseId, 'exitVelocity', value)}
-          placeholder="Enter exit velocity"
-        />
-      );
-    }
-
-    if (metricType === 'mixed') {
-      return (
-        <div className="grid gap-4 md:grid-cols-2">
-          <MetricInputCard
-            label="Reps"
-            value={currentLog.reps}
-            onChange={(value) => updateLog(current.exerciseId, 'reps', value)}
-            placeholder="Enter reps"
-          />
-          <MetricInputCard
-            label="Time (seconds)"
-            value={currentLog.timeSeconds}
-            onChange={(value) => updateLog(current.exerciseId, 'timeSeconds', value)}
-            placeholder="Enter time"
-          />
-          <MetricInputCard
-            label="Score"
-            value={currentLog.score}
-            onChange={(value) => updateLog(current.exerciseId, 'score', value)}
-            placeholder="Enter score"
-          />
-          <MetricInputCard
-            label="Exit Velocity"
-            value={currentLog.exitVelocity}
-            onChange={(value) => updateLog(current.exerciseId, 'exitVelocity', value)}
-            placeholder="Enter exit velocity"
-          />
-        </div>
-      );
-    }
-
-    return (
-      <MetricInputCard
-        label="Reps"
-        value={currentLog.reps}
-        onChange={(value) => updateLog(current.exerciseId, 'reps', value)}
-        placeholder="Enter reps"
-      />
-    );
+  function getPrimaryField(metricType?: string | null): keyof LogState {
+    if (metricType === 'time') return 'timeSeconds';
+    if (metricType === 'score') return 'score';
+    if (metricType === 'exit_velocity') return 'exitVelocity';
+    if (metricType === 'mixed') return 'score';
+    return 'reps';
   }
 
-  function renderFeedback() {
-    if (!current) return null;
+  function getPrimaryLabel(metricType?: string | null) {
+    if (metricType === 'time') return 'Time';
+    if (metricType === 'score') return 'Score';
+    if (metricType === 'exit_velocity') return 'Exit Velocity';
+    if (metricType === 'mixed') return 'Score';
+    return 'Reps';
+  }
 
-    const metricType = current.metricType ?? 'reps';
+  function getPrimaryPlaceholder(metricType?: string | null) {
+    if (metricType === 'time') return 'Enter time';
+    if (metricType === 'score') return 'Enter score';
+    if (metricType === 'exit_velocity') return 'Enter exit velocity';
+    if (metricType === 'mixed') return 'Enter score';
+    return 'Enter reps';
+  }
 
-    let currentValue: number | null = null;
-    let lastValue: number | null = null;
-    let bestValue: number | null = null;
-    let label = 'Value';
+  function getCurrentInputValue() {
+    if (!current) return '';
+    const field = getPrimaryField(current.metricType);
+    return currentLog[field];
+  }
 
-    if (metricType === 'reps') {
-      currentValue = toNumberOrNull(currentLog.reps);
-      lastValue = current.lastResult?.reps ?? null;
-      bestValue = current.bestResult?.reps ?? null;
-      label = 'Reps';
-    } else if (metricType === 'time') {
-      currentValue = toNumberOrNull(currentLog.timeSeconds);
-      lastValue = current.lastResult?.timeSeconds ?? null;
-      bestValue = current.bestResult?.timeSeconds ?? null;
-      label = 'Time';
-    } else if (metricType === 'score') {
-      currentValue = toNumberOrNull(currentLog.score);
-      lastValue = current.lastResult?.score ?? null;
-      bestValue = current.bestResult?.score ?? null;
-      label = 'Score';
-    } else if (metricType === 'exit_velocity') {
-      currentValue = toNumberOrNull(currentLog.exitVelocity);
-      lastValue = current.lastResult?.exitVelocity ?? null;
-      bestValue = current.bestResult?.exitVelocity ?? null;
-      label = 'Exit Velocity';
+  function setCurrentInputValue(value: string) {
+    if (!current) return;
+    const field = getPrimaryField(current.metricType);
+    updateLog(current.exerciseId, field, value);
+  }
+
+  function formatMetricValue(
+    value: number | null | undefined,
+    metricType: string | null | undefined
+  ) {
+    if (value == null) return '—';
+    if (metricType === 'time') return `${value}s`;
+    return `${value}`;
+  }
+
+  function handleContinue() {
+    if (currentIndex < exercises.length - 1) {
+      setCurrentIndex((index) => index + 1);
+      return;
     }
 
-    if (currentValue == null && lastValue == null && bestValue == null) return null;
-
-    const vsLast =
-      currentValue != null && lastValue != null ? currentValue - lastValue : null;
-    const vsBest =
-      currentValue != null && bestValue != null ? currentValue - bestValue : null;
-
-    return (
-      <div className="mb-6 rounded-xl border border-zinc-800 bg-black/40 p-4">
-        <p className="mb-3 text-sm uppercase tracking-[0.2em] text-zinc-500">
-          Feedback
-        </p>
-
-        <div className="grid gap-3 md:grid-cols-3">
-          <FeedbackStat label={`Last ${label}`} value={formatMetricValue(lastValue, metricType)} />
-          <FeedbackStat label={`Best ${label}`} value={formatMetricValue(bestValue, metricType)} />
-          <FeedbackStat label={`Current ${label}`} value={formatMetricValue(currentValue, metricType)} />
-        </div>
-
-        {(vsLast != null || vsBest != null) && (
-          <div className="mt-4 space-y-1 text-sm">
-            {vsLast != null ? (
-              <p className={vsLast >= 0 ? 'text-lime-400' : 'text-red-400'}>
-                vs last: {vsLast >= 0 ? '+' : ''}
-                {formatDelta(vsLast, metricType)}
-              </p>
-            ) : null}
-
-            {vsBest != null ? (
-              <p className={vsBest >= 0 ? 'text-lime-400' : 'text-zinc-400'}>
-                vs best: {vsBest >= 0 ? '+' : ''}
-                {formatDelta(vsBest, metricType)}
-              </p>
-            ) : null}
-          </div>
-        )}
-      </div>
-    );
+    handleCompleteSession();
   }
 
   function handleCompleteSession() {
@@ -397,53 +526,16 @@ export default function WorkoutRunner({
   }
 
   if (completed) {
-    return (
-      <div className="mx-auto w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-8 text-center">
-        <p className="mb-2 text-sm uppercase tracking-[0.2em] text-zinc-500">
-          Session Complete
-        </p>
+    if (typeof window !== 'undefined') {
+      window.location.href = buildCompletionRedirectUrl();
+    }
 
-        <h1 className="mb-4 text-4xl font-bold">{title}</h1>
-
-        <p className="mb-4 text-zinc-300">
-          Nice work. You completed all {exercises.length} exercises in this
-          session.
-        </p>
-
-        {saveMessage ? (
-          <p className="mb-8 text-sm text-lime-400">{saveMessage}</p>
-        ) : null}
-
-        <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <button
-            onClick={() => {
-              setCompleted(false);
-              setStarted(true);
-              setCurrentIndex(0);
-            }}
-            className="rounded-full bg-white px-6 py-3 font-semibold text-black"
-          >
-            Restart Session
-          </button>
-
-          <button
-            onClick={() => {
-              setCompleted(false);
-              setStarted(false);
-              setCurrentIndex(0);
-            }}
-            className="rounded-full border border-zinc-700 px-6 py-3 font-semibold text-white"
-          >
-            Back to Start
-          </button>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   if (!started) {
     return (
-      <div className="mx-auto w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-8 text-center">
+      <div className="mx-auto w-full max-w-2xl rounded-[32px] border border-zinc-800 bg-zinc-950 p-8 text-center">
         <p className="mb-2 text-sm uppercase tracking-[0.2em] text-zinc-500">
           Workout Session
         </p>
@@ -451,7 +543,7 @@ export default function WorkoutRunner({
         <h1 className="mb-4 text-4xl font-bold">{title}</h1>
 
         <p className="mb-8 text-zinc-400">
-          {exercises.length} exercises in this session
+          {exercises.length} exercise{exercises.length === 1 ? '' : 's'} in this session
         </p>
 
         {errorMessage ? (
@@ -464,7 +556,7 @@ export default function WorkoutRunner({
             setStarted(true);
             setCurrentIndex(0);
           }}
-          className="rounded-full bg-white px-6 py-3 font-semibold text-black"
+          className="rounded-2xl bg-lime-400 px-6 py-3 font-semibold text-black shadow-[0_0_20px_rgba(132,204,22,0.25)]"
         >
           Start Session
         </button>
@@ -480,194 +572,126 @@ export default function WorkoutRunner({
     );
   }
 
-  return (
-    <div className="mx-auto max-w-3xl">
-      <div className="mb-6">
-        <p className="mb-2 text-sm uppercase tracking-[0.2em] text-zinc-500">
-          {title}
-        </p>
+  const primaryMetricType = current.metricType ?? 'reps';
+  const primaryFieldLabel = getPrimaryLabel(primaryMetricType);
+  const primaryInputValue = getCurrentInputValue();
+  const prescriptionText = formatPrescription();
+  const lastValue = getMetricValueFromSnapshot(current.lastResult, primaryMetricType);
+  const bestValue = getMetricValueFromSnapshot(current.bestResult, primaryMetricType);
 
-        <div className="mb-3 h-2 w-full rounded-full bg-zinc-800">
+  return (
+    <div className="mx-auto max-w-xl">
+      <div className="mb-6">
+        <div className="mb-3 h-1.5 w-full rounded-full bg-zinc-800">
           <div
-            className="h-2 rounded-full bg-white transition-all duration-300"
+            className="h-1.5 rounded-full bg-lime-400 transition-all duration-300"
             style={{ width: `${progressPercent}%` }}
           />
         </div>
 
-        <p className="text-sm text-zinc-500">
-          Exercise {currentIndex + 1} / {exercises.length}
+        <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+          {currentIndex + 1} of {exercises.length}
         </p>
       </div>
 
-      <div className="rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
-        <h1 className="mb-4 text-3xl font-bold">{current.name}</h1>
+      <div className="mb-10 text-center">
+        <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
+          {current.name}
+        </h1>
 
-        {current.description ? (
-          <p className="mb-4 text-zinc-300">{current.description}</p>
+        {prescriptionText ? (
+          <p className="mt-3 text-lg text-zinc-400">{prescriptionText}</p>
         ) : null}
+      </div>
 
-        {current.instructions ? (
-          <div className="mb-6 rounded-xl border border-zinc-800 bg-black/40 p-4">
-            <p className="mb-1 text-sm uppercase tracking-[0.2em] text-zinc-500">
-              Instructions
+      <div className="mb-10">
+        <p className="mb-3 text-xs uppercase tracking-[0.18em] text-zinc-500">
+          Log {primaryFieldLabel}
+        </p>
+
+        <input
+          id="runner-primary-input"
+          type="number"
+          inputMode="decimal"
+          value={primaryInputValue}
+          onChange={(e) => setCurrentInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handleContinue();
+            }
+          }}
+          placeholder="Enter result"
+          className="w-full rounded-3xl border border-zinc-700 bg-black px-6 py-8 text-center text-4xl font-bold text-white outline-none placeholder:text-zinc-600"
+        />
+      </div>
+
+      {(lastValue != null || bestValue != null) && (
+        <div className="mb-10 grid grid-cols-2 gap-4 text-center">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/90 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+              Last
             </p>
-            <p className="text-zinc-300">{current.instructions}</p>
+            <p className="mt-2 text-2xl font-bold text-white">
+              {formatMetricValue(lastValue, primaryMetricType)}
+            </p>
           </div>
-        ) : null}
 
-        {renderPrescription()}
-
-        <div className="mb-6 rounded-2xl border border-zinc-800 bg-black/40 p-4">
-          <p className="mb-3 text-sm uppercase tracking-[0.2em] text-zinc-500">
-            Log Result
-          </p>
-          {renderMetricInputs()}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/90 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+              Best
+            </p>
+            <p className="mt-2 text-2xl font-bold text-white">
+              {formatMetricValue(bestValue, primaryMetricType)}
+            </p>
+          </div>
         </div>
+      )}
 
-        {renderFeedback()}
-
-        {currentContent.length > 0 ? (
-          <div className="space-y-4">
-            {currentContent.map((item, index) => (
-              <div
-                key={`${item.title}-${index}`}
-                className="rounded-2xl border border-zinc-800 bg-black/40 p-4"
-              >
-                <p className="mb-3 text-sm uppercase tracking-[0.2em] text-zinc-500">
-                  Video
-                </p>
-
-                {item.url ? (
-                  <div className="flex flex-wrap gap-3">
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-black"
-                    >
-                      Open {item.title}
-                    </a>
-
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex rounded-full border border-zinc-700 px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Open in New Tab
-                    </a>
-                  </div>
-                ) : (
-                  <p className="text-zinc-500">No video link available</p>
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-zinc-800 bg-black/40 p-4">
-            <p className="text-zinc-500">
-              No linked content for this exercise yet.
-            </p>
-          </div>
-        )}
-
-        {errorMessage ? (
-          <p className="mt-6 text-sm text-red-400">{errorMessage}</p>
-        ) : null}
-
-        <div className="mt-10 flex justify-between gap-3">
-          <button
-            disabled={currentIndex === 0 || isPending}
-            onClick={() => setCurrentIndex((index) => index - 1)}
-            className="rounded border border-zinc-700 px-4 py-2 disabled:opacity-40"
+      {currentContent.length > 0 && currentContent[0]?.url ? (
+        <div className="mb-10 text-center">
+          <a
+            href={currentContent[0].url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
           >
-            Back
-          </button>
-
-          {currentIndex < exercises.length - 1 ? (
-            <button
-              disabled={isPending}
-              onClick={() => setCurrentIndex((index) => index + 1)}
-              className="rounded bg-white px-4 py-2 text-black disabled:opacity-40"
-            >
-              Next
-            </button>
-          ) : (
-            <button
-              disabled={isPending}
-              onClick={handleCompleteSession}
-              className="rounded bg-green-500 px-4 py-2 font-semibold text-black disabled:opacity-40"
-            >
-              {isGuest ? 'Finish and Save After Signup' : isPending ? 'Saving...' : 'Complete Session'}
-            </button>
-          )}
+            View Video
+          </a>
         </div>
+      ) : null}
+
+      {errorMessage ? (
+        <p className="mb-4 text-center text-sm text-red-400">{errorMessage}</p>
+      ) : null}
+
+      {saveMessage ? (
+        <p className="mb-4 text-center text-sm text-lime-400">{saveMessage}</p>
+      ) : null}
+
+      <div className="flex gap-3">
+        <button
+          disabled={currentIndex === 0 || isPending}
+          onClick={() => setCurrentIndex((i) => i - 1)}
+          className="rounded-2xl border border-zinc-700 px-5 py-4 text-sm font-semibold text-zinc-300 disabled:opacity-40"
+        >
+          Back
+        </button>
+
+        <button
+          disabled={isPending}
+          onClick={handleContinue}
+          className="flex-1 rounded-2xl bg-lime-400 py-5 text-lg font-bold text-black shadow-[0_0_20px_rgba(132,204,22,0.25)]"
+        >
+          {currentIndex < exercises.length - 1
+            ? 'Next'
+            : isGuest
+              ? 'Finish'
+              : isPending
+                ? 'Saving...'
+                : 'Complete'}
+        </button>
       </div>
     </div>
   );
-}
-
-function MetricInputCard({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm text-zinc-400">{label}</label>
-      <input
-        type="number"
-        inputMode="decimal"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-white outline-none placeholder:text-zinc-500"
-      />
-    </div>
-  );
-}
-
-function FeedbackStat({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
-      <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold text-white">{value}</p>
-    </div>
-  );
-}
-
-function toNumberOrNull(value: string) {
-  if (!value || value.trim() === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatMetricValue(
-  value: number | null | undefined,
-  metricType: string | null | undefined
-) {
-  if (value == null) return '—';
-
-  if (metricType === 'time') return `${value}s`;
-  return `${value}`;
-}
-
-function formatDelta(
-  value: number,
-  metricType: string | null | undefined
-) {
-  if (metricType === 'time') return `${value}s`;
-  return `${value}`;
 }

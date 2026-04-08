@@ -191,7 +191,7 @@ export default async function TrainingPage() {
           </p>
 
           <Link
-            href={`/dashboard/training/${currentWorkout.id}`}
+            href={`/dashboard/training/${currentWorkout.id}/run`}
             className="mt-6 inline-block rounded-2xl bg-lime-400 px-6 py-4 text-lg font-bold text-black no-underline transition hover:bg-lime-300"
           >
             {isGuest ? 'Start First Session' : 'Continue Session'}
@@ -339,7 +339,7 @@ export default async function TrainingPage() {
               return (
                 <Link
                   key={workout.id}
-                  href={`/dashboard/training/${workout.id}`}
+                  href={`/dashboard/training/${workout.id}/run`}
                   className="block no-underline"
                 >
                   {cardContent}

@@ -131,7 +131,7 @@ export default async function AthleteChallengePage() {
   const activeWorkout = nextWorkout ?? programWorkouts[0] ?? null;
   const activeDay = activeWorkout?.day_order ?? 1;
   const todayRoute = activeWorkout
-    ? `/dashboard/training/${activeWorkout.id}`
+    ? `/dashboard/training/${activeWorkout.id}/run`
     : '/dashboard/training';
 
   const challengeAccentName = getAthleteFromWorkoutTitle(activeWorkout?.title);
@@ -229,7 +229,7 @@ export default async function AthleteChallengePage() {
 
       <section className="mb-8">
         <Link
-          href={todayRoute}
+          href={`/dashboard/training/${activeWorkout.id}/run`}
           className="block w-full rounded-[28px] bg-lime-400 px-6 py-5 text-center text-2xl font-extrabold text-black no-underline transition-all duration-150 hover:bg-lime-300 active:scale-[0.97] active:bg-lime-500"
         >
           Start Challenge Session

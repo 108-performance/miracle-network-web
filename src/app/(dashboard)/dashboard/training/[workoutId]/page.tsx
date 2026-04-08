@@ -83,8 +83,41 @@ type ContentPost = {
   created_at: string | null;
 };
 
+function normalizeMetricType(metricType?: string | null) {
+  const normalized = (metricType ?? '').toLowerCase().trim();
+
+  if (
+    normalized === 'time' ||
+    normalized === 'seconds' ||
+    normalized === 'time_seconds' ||
+    normalized === 'duration'
+  ) {
+    return 'time';
+  }
+
+  if (normalized === 'score' || normalized === 'points') {
+    return 'score';
+  }
+
+  if (
+    normalized === 'exit_velocity' ||
+    normalized === 'exit velocity' ||
+    normalized === 'exit-velocity' ||
+    normalized === 'ev'
+  ) {
+    return 'exit_velocity';
+  }
+
+  if (normalized === 'mixed') {
+    return 'mixed';
+  }
+
+  return 'reps';
+}
+
 function buildProgressionByExerciseId(
-  rows: ExerciseProgressionRow[]
+  rows: ExerciseProgressionRow[],
+  metricTypeByExerciseId: Record<string, string>
 ): Record<string, ExerciseProgression> {
   const grouped = new Map<string, ExerciseProgressionRow[]>();
 
@@ -102,51 +135,80 @@ function buildProgressionByExerciseId(
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     );
 
-    const completedLogs = sorted.filter((log) => log.completed);
+    const metricType = normalizeMetricType(metricTypeByExerciseId[exerciseId]);
+
+    const repsLogs = sorted.filter(
+      (log) => log.actual_reps != null && log.actual_reps >= 0
+    );
+    const scoreLogs = sorted.filter(
+      (log) => log.actual_score != null && log.actual_score >= 0
+    );
+    const evLogs = sorted.filter(
+      (log) => log.actual_exit_velocity != null && log.actual_exit_velocity >= 0
+    );
+    const timeLogs = sorted.filter(
+      (log) => log.actual_time_seconds != null && log.actual_time_seconds >= 0
+    );
+
+    const bestReps =
+      repsLogs.length > 0
+        ? Math.max(...repsLogs.map((log) => log.actual_reps as number))
+        : null;
+
+    const bestScore =
+      scoreLogs.length > 0
+        ? Math.max(...scoreLogs.map((log) => log.actual_score as number))
+        : null;
+
+    const bestExitVelocity =
+      evLogs.length > 0
+        ? Math.max(...evLogs.map((log) => log.actual_exit_velocity as number))
+        : null;
+
+    const bestTimeSeconds =
+      timeLogs.length > 0
+        ? Math.min(...timeLogs.map((log) => log.actual_time_seconds as number))
+        : null;
 
     const best = {
-      actual_score:
-        completedLogs.length > 0
-          ? Math.max(
-              ...completedLogs
-                .map((log) => log.actual_score)
-                .filter((value): value is number => value != null),
-              0
-            ) || null
-          : null,
-      actual_exit_velocity:
-        completedLogs.length > 0
-          ? Math.max(
-              ...completedLogs
-                .map((log) => log.actual_exit_velocity)
-                .filter((value): value is number => value != null),
-              0
-            ) || null
-          : null,
-      actual_reps:
-        completedLogs.length > 0
-          ? Math.max(
-              ...completedLogs
-                .map((log) => log.actual_reps)
-                .filter((value): value is number => value != null),
-              0
-            ) || null
-          : null,
-      actual_time_seconds:
-        completedLogs.length > 0
-          ? Math.max(
-              ...completedLogs
-                .map((log) => log.actual_time_seconds)
-                .filter((value): value is number => value != null),
-              0
-            ) || null
-          : null,
+      actual_score: bestScore,
+      actual_exit_velocity: bestExitVelocity,
+      actual_reps: bestReps,
+      actual_time_seconds: bestTimeSeconds,
     };
 
-    result[exerciseId] = {
-      last: sorted[0] ?? null,
+    const lastValidLog =
+      metricType === 'time'
+        ? sorted.find(
+            (log) =>
+              log.actual_time_seconds != null && log.actual_time_seconds >= 0
+          ) ?? null
+        : metricType === 'score'
+        ? sorted.find(
+            (log) => log.actual_score != null && log.actual_score >= 0
+          ) ?? null
+        : metricType === 'exit_velocity'
+        ? sorted.find(
+            (log) =>
+              log.actual_exit_velocity != null &&
+              log.actual_exit_velocity >= 0
+          ) ?? null
+        : sorted.find(
+            (log) => log.actual_reps != null && log.actual_reps >= 0
+          ) ?? null;
+
+    console.log('EXERCISE PROGRESSION DEBUG', {
+      exerciseId,
+      metricType,
+      logCount: sorted.length,
+      last: lastValidLog,
       best,
-      completionCount: completedLogs.length,
+    });
+
+    result[exerciseId] = {
+      last: lastValidLog,
+      best,
+      completionCount: sorted.filter((log) => log.completed).length,
     };
   }
 
@@ -238,6 +300,16 @@ export default async function WorkoutDetailPage({
   const workoutExercises = (workoutExercisesData ?? []) as WorkoutExercise[];
   const exerciseIds = workoutExercises.map((item) => item.exercise_id);
 
+  const metricTypeByExerciseId = workoutExercises.reduce<Record<string, string>>(
+    (acc, item) => {
+      const exercise = getExerciseRecord(item.exercise);
+      acc[item.exercise_id] =
+        item.metric_type ?? exercise?.default_metric_type ?? 'reps';
+      return acc;
+    },
+    {}
+  );
+
   const { data: contentPostsData } = await supabase
     .from('content_posts')
     .select(
@@ -289,7 +361,8 @@ export default async function WorkoutDetailPage({
       .order('created_at', { ascending: false });
 
     progressionByExerciseId = buildProgressionByExerciseId(
-      (progressionRows ?? []) as ExerciseProgressionRow[]
+      (progressionRows ?? []) as ExerciseProgressionRow[],
+      metricTypeByExerciseId
     );
   }
 
