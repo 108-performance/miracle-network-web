@@ -185,3 +185,30 @@ export async function updateContentPost(formData: FormData) {
 
   redirect('/content');
 }
+
+export async function deleteContentPost(formData: FormData) {
+  const supabase = await createClient();
+
+  const id = String(formData.get('id') || '').trim();
+
+  if (!id) {
+    throw new Error('Content id is required');
+  }
+
+  const { error } = await supabase
+    .from('content_posts')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('deleteContentPost error:', error);
+    throw new Error(error.message);
+  }
+
+  revalidatePath('/content');
+  revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard/compete');
+  revalidatePath('/dashboard/workout');
+
+  redirect('/content');
+}

@@ -32,60 +32,85 @@ export async function saveWorkoutSessionAction(
 ) {
   const supabase = await createClient();
 
-  let user = null;
+  // --------------------------
+  // 1. Get auth user safely
+  // --------------------------
+  let authUser = null;
 
   try {
-    const {
-      data: { user: authUser },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !authUser) {
-      throw new Error('You must be logged in to save a workout session.');
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) {
+      throw new Error('User not authenticated');
     }
-
-    user = authUser;
+    authUser = data.user;
   } catch {
     throw new Error('You must be logged in to save a workout session.');
   }
 
-  let athlete: { id: string } | null = null;
+  // --------------------------
+  // 2. Ensure public.users row exists
+  // --------------------------
+  let appUser = null;
 
-  const { data: existingAthlete, error: athleteError } = await supabase
-    .from('athletes')
+  const { data: existingUser } = await supabase
+    .from('users')
     .select('id')
-    .eq('user_id', user.id)
+    .eq('id', authUser.id)
     .maybeSingle();
 
-  if (athleteError) {
-    console.error('saveWorkoutSessionAction athletes lookup error:', athleteError);
-    throw new Error(athleteError.message || 'Failed to load athlete profile.');
-  }
-
-  athlete = existingAthlete ?? null;
-
-  if (!athlete) {
-    const { data: createdAthlete, error: createAthleteError } = await supabase
-      .from('athletes')
+  if (existingUser) {
+    appUser = existingUser;
+  } else {
+    const { data: createdUser, error: createUserError } = await supabase
+      .from('users')
       .insert({
-        user_id: user.id,
+        id: authUser.id,
+        email: authUser.email,
       })
       .select('id')
       .single();
 
-    if (createAthleteError || !createdAthlete) {
-      console.error(
-        'saveWorkoutSessionAction athletes create error:',
-        createAthleteError
-      );
-      throw new Error(
-        createAthleteError?.message || 'Failed to create athlete profile.'
-      );
+    if (createUserError || !createdUser) {
+      console.error('users create error:', createUserError);
+      throw new Error('Failed to create user record.');
+    }
+
+    appUser = createdUser;
+  }
+
+  // --------------------------
+  // 3. Ensure athlete exists
+  // --------------------------
+  let athlete = null;
+
+  const { data: existingAthlete } = await supabase
+    .from('athletes')
+    .select('id')
+    .eq('user_id', appUser.id)
+    .maybeSingle();
+
+  if (existingAthlete) {
+    athlete = existingAthlete;
+  } else {
+    const { data: createdAthlete, error: athleteError } = await supabase
+      .from('athletes')
+      .insert({
+        user_id: appUser.id,
+      })
+      .select('id')
+      .single();
+
+    if (athleteError || !createdAthlete) {
+      console.error('athlete create error:', athleteError);
+      throw new Error('Failed to create athlete profile.');
     }
 
     athlete = createdAthlete;
   }
 
+  // --------------------------
+  // 4. Create workout log
+  // --------------------------
   const { data: workoutLog, error: workoutLogError } = await supabase
     .from('workout_logs')
     .insert({
@@ -97,12 +122,13 @@ export async function saveWorkoutSessionAction(
     .single();
 
   if (workoutLogError || !workoutLog) {
-    console.error('saveWorkoutSessionAction workout_logs error:', workoutLogError);
-    throw new Error(
-      workoutLogError?.message || 'Failed to save workout completion.'
-    );
+    console.error('workout_logs error:', workoutLogError);
+    throw new Error('Failed to save workout completion.');
   }
 
+  // --------------------------
+  // 5. Create exercise logs
+  // --------------------------
   const rowsToInsert = input.exercises
     .map((item) => {
       const actual_reps = toNumberOrNull(item.reps);
@@ -137,16 +163,14 @@ export async function saveWorkoutSessionAction(
       .insert(rowsToInsert);
 
     if (exerciseLogsError) {
-      console.error(
-        'saveWorkoutSessionAction exercise_logs error:',
-        exerciseLogsError
-      );
-      throw new Error(
-        exerciseLogsError.message || 'Failed to save exercise logs.'
-      );
+      console.error('exercise_logs error:', exerciseLogsError);
+      throw new Error('Failed to save exercise logs.');
     }
   }
 
+  // --------------------------
+  // 6. Revalidate
+  // --------------------------
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/workout');
   revalidatePath(`/dashboard/workout/${input.elementSlug}/${input.levelSlug}`);

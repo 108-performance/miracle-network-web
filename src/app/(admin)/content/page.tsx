@@ -1,12 +1,15 @@
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
+import { deleteContentPost } from './actions';
 
 export default async function ContentPage() {
   const supabase = await createClient();
 
   const { data: contentPosts, error } = await supabase
     .from('content_posts')
-    .select('id, title, description, content_type, status, audience, created_at')
+    .select(
+      'id, title, description, content_type, status, audience, intel_type, created_at'
+    )
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -30,25 +33,40 @@ export default async function ContentPage() {
       <div className="space-y-3">
         {contentPosts && contentPosts.length > 0 ? (
           contentPosts.map((post: any) => (
-            <Link
+            <div
               key={post.id}
-              href={`/content/${post.id}/edit`}
-              className="block rounded border p-4 no-underline hover:bg-zinc-50"
+              className="rounded border p-4 hover:bg-zinc-50"
             >
-              <div className="flex justify-between gap-4">
-                <div>
+              <div className="flex items-start justify-between gap-4">
+                <Link
+                  href={`/content/${post.id}/edit`}
+                  className="block flex-1 no-underline"
+                >
                   <p className="font-semibold text-black">{post.title}</p>
                   <p className="text-sm text-gray-500">
                     {post.description || 'No description'}
                   </p>
                   <p className="mt-1 text-xs text-gray-400">
                     {post.content_type} • {post.audience}
+                    {post.intel_type ? ` • ${post.intel_type}` : ''}
                   </p>
-                </div>
+                </Link>
 
-                <div className="text-sm text-gray-600">{post.status}</div>
+                <div className="flex items-center gap-3">
+                  <div className="text-sm text-gray-600">{post.status}</div>
+
+                  <form action={deleteContentPost}>
+                    <input type="hidden" name="id" value={post.id} />
+                    <button
+                      type="submit"
+                      className="rounded border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </div>
-            </Link>
+            </div>
           ))
         ) : (
           <div className="text-gray-500">No content yet</div>
