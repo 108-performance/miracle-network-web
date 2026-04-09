@@ -22,6 +22,7 @@ export async function createContentPost(formData: FormData) {
   const content_type = String(formData.get('content_type') || '').trim();
   const status = String(formData.get('status') || '').trim();
   const audience = String(formData.get('audience') || '').trim();
+  const intel_type = normalizeNullableValue(formData.get('intel_type'));
   const training_program_id = normalizeNullableValue(
     formData.get('training_program_id')
   );
@@ -71,6 +72,7 @@ export async function createContentPost(formData: FormData) {
     content_type,
     status,
     audience,
+    intel_type,
     training_program_id,
     workout_id,
     exercise_id,
@@ -102,6 +104,7 @@ export async function updateContentPost(formData: FormData) {
   const content_type = String(formData.get('content_type') || '').trim();
   const status = String(formData.get('status') || '').trim();
   const audience = String(formData.get('audience') || '').trim();
+  const intel_type = normalizeNullableValue(formData.get('intel_type'));
   const training_program_id = normalizeNullableValue(
     formData.get('training_program_id')
   );
@@ -160,6 +163,7 @@ export async function updateContentPost(formData: FormData) {
       content_type,
       status,
       audience,
+      intel_type,
       training_program_id,
       workout_id,
       exercise_id,

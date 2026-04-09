@@ -54,6 +54,16 @@ function getVimeoEmbedUrl(url?: string | null): string | null {
   }
 }
 
+type IntelRow = {
+  id: string;
+  external_url: string | null;
+  file_url: string | null;
+  created_at: string | null;
+  is_primary: boolean | null;
+  sort_order: number | null;
+  intel_type: string | null;
+};
+
 export default async function AthleteIntelPage({
   params,
 }: {
@@ -77,9 +87,11 @@ export default async function AthleteIntelPage({
     redirect('/dashboard');
   }
 
-  const { data: intelRows } = await supabase
+  const baseQuery = supabase
     .from('content_posts')
-    .select('id, external_url, file_url, created_at, is_primary, sort_order')
+    .select(
+      'id, external_url, file_url, created_at, is_primary, sort_order, intel_type'
+    )
     .eq('workout_id', workoutId)
     .eq('status', 'published')
     .in('audience', ['athletes', 'both'])
@@ -89,7 +101,28 @@ export default async function AthleteIntelPage({
     .order('created_at', { ascending: false })
     .limit(1);
 
-  const intel = intelRows?.[0] ?? null;
+  const { data: sessionIntroRows } = await supabase
+    .from('content_posts')
+    .select(
+      'id, external_url, file_url, created_at, is_primary, sort_order, intel_type'
+    )
+    .eq('workout_id', workoutId)
+    .eq('status', 'published')
+    .in('audience', ['athletes', 'both'])
+    .is('exercise_id', null)
+    .eq('intel_type', 'session_intro')
+    .order('is_primary', { ascending: false })
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: false })
+    .limit(1);
+
+  let intel = (sessionIntroRows?.[0] ?? null) as IntelRow | null;
+
+  if (!intel) {
+    const { data: fallbackRows } = await baseQuery;
+    intel = (fallbackRows?.[0] ?? null) as IntelRow | null;
+  }
+
   const rawUrl = intel?.external_url || intel?.file_url || null;
   const embedUrl = getVimeoEmbedUrl(rawUrl);
 

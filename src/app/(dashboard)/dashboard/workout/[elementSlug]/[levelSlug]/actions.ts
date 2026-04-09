@@ -32,26 +32,60 @@ export async function saveWorkoutSessionAction(
 ) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser();
+  let user = null;
 
-  if (userError || !user) {
+  try {
+    const {
+      data: { user: authUser },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !authUser) {
+      throw new Error('You must be logged in to save a workout session.');
+    }
+
+    user = authUser;
+  } catch {
     throw new Error('You must be logged in to save a workout session.');
   }
 
-  const { data: athlete, error: athleteError } = await supabase
+  let athlete: { id: string } | null = null;
+
+  const { data: existingAthlete, error: athleteError } = await supabase
     .from('athletes')
     .select('id')
     .eq('user_id', user.id)
-    .single();
+    .maybeSingle();
 
-  if (athleteError || !athlete) {
-    throw new Error('Athlete profile not found for the current user.');
+  if (athleteError) {
+    console.error('saveWorkoutSessionAction athletes lookup error:', athleteError);
+    throw new Error(athleteError.message || 'Failed to load athlete profile.');
   }
 
-  // 1. Create workout log first
+  athlete = existingAthlete ?? null;
+
+  if (!athlete) {
+    const { data: createdAthlete, error: createAthleteError } = await supabase
+      .from('athletes')
+      .insert({
+        user_id: user.id,
+      })
+      .select('id')
+      .single();
+
+    if (createAthleteError || !createdAthlete) {
+      console.error(
+        'saveWorkoutSessionAction athletes create error:',
+        createAthleteError
+      );
+      throw new Error(
+        createAthleteError?.message || 'Failed to create athlete profile.'
+      );
+    }
+
+    athlete = createdAthlete;
+  }
+
   const { data: workoutLog, error: workoutLogError } = await supabase
     .from('workout_logs')
     .insert({
@@ -69,7 +103,6 @@ export async function saveWorkoutSessionAction(
     );
   }
 
-  // 2. Create exercise logs that point to workout_log_id
   const rowsToInsert = input.exercises
     .map((item) => {
       const actual_reps = toNumberOrNull(item.reps);

@@ -38,6 +38,9 @@ export default async function NewContentPage() {
       <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
         <p className="font-medium text-zinc-900">Athlete Intel rule</p>
         <p className="mt-1">
+          Session Intro = shown before a workout begins.
+        </p>
+        <p className="mt-1">
           For workout-level Athlete Intel, choose a workout and leave exercise blank.
         </p>
       </div>
@@ -59,7 +62,7 @@ export default async function NewContentPage() {
 
         <textarea
           name="short_text"
-          placeholder="Short text (optional, used for concise Athlete Intel copy)"
+          placeholder="Short text (optional)"
           className="w-full rounded border p-2"
           rows={3}
         />
@@ -93,6 +96,24 @@ export default async function NewContentPage() {
           <option value="coaches">Coaches</option>
           <option value="both">Both</option>
         </select>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">Intel Type</label>
+          <select
+            name="intel_type"
+            className="w-full rounded border p-2"
+            defaultValue=""
+          >
+            <option value="">No intel type</option>
+            <option value="session_intro">Session Intro</option>
+            <option value="quick_action_intro">Quick Action Intro</option>
+            <option value="movement_principle">Movement Principle</option>
+            <option value="skill_principle">Skill Principle</option>
+          </select>
+          <p className="text-xs text-zinc-500">
+            Session Intro is the current Athlete Intel location before the runner.
+          </p>
+        </div>
 
         <div className="space-y-2">
           <label className="block text-sm font-medium">Training Program</label>
