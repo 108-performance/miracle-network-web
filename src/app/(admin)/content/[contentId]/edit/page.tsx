@@ -45,11 +45,22 @@ export default async function EditContentPage({
 
   return (
     <div className="max-w-2xl p-6">
-      <h1 className="mb-6 text-2xl font-bold">Edit Content</h1>
+      <h1 className="mb-2 text-2xl font-bold">Edit Content</h1>
+
+      <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+        <p className="font-medium text-zinc-900">Athlete Intel rule</p>
+        <p className="mt-1">
+          For workout-level Athlete Intel, choose a workout and leave exercise blank.
+        </p>
+      </div>
 
       <form action={updateContentPost} className="space-y-4">
         <input type="hidden" name="id" value={content.id} />
-        <input type="hidden" name="existing_file_url" value={content.file_url ?? ''} />
+        <input
+          type="hidden"
+          name="existing_file_url"
+          value={content.file_url ?? ''}
+        />
 
         <input
           name="title"
@@ -65,6 +76,14 @@ export default async function EditContentPage({
           placeholder="Description"
           className="w-full rounded border p-2"
           rows={4}
+        />
+
+        <textarea
+          name="short_text"
+          defaultValue={content.short_text ?? ''}
+          placeholder="Short text (optional, used for concise Athlete Intel copy)"
+          className="w-full rounded border p-2"
+          rows={3}
         />
 
         <select
@@ -128,6 +147,9 @@ export default async function EditContentPage({
               </option>
             ))}
           </select>
+          <p className="text-xs text-zinc-500">
+            Choose a workout for workout-level Athlete Intel.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -144,6 +166,9 @@ export default async function EditContentPage({
               </option>
             ))}
           </select>
+          <p className="text-xs text-zinc-500">
+            Leave blank for workout-level Athlete Intel.
+          </p>
         </div>
 
         <input
@@ -152,6 +177,20 @@ export default async function EditContentPage({
           placeholder="External Video URL"
           className="w-full rounded border p-2"
         />
+
+        <div className="flex items-center gap-2 rounded border p-3">
+          <input
+            id="is_primary"
+            name="is_primary"
+            type="checkbox"
+            value="true"
+            defaultChecked={Boolean(content.is_primary)}
+            className="h-4 w-4"
+          />
+          <label htmlFor="is_primary" className="text-sm">
+            Mark as primary content
+          </label>
+        </div>
 
         {content.file_url ? (
           <div className="rounded border bg-zinc-50 p-3 text-sm text-zinc-700">

@@ -4,20 +4,31 @@ import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+function normalizeNullableValue(value: FormDataEntryValue | null) {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+}
+
+function normalizeCheckboxValue(value: FormDataEntryValue | null) {
+  return String(value || '').trim() === 'true';
+}
+
 export async function createContentPost(formData: FormData) {
   const supabase = await createClient();
 
   const title = String(formData.get('title') || '').trim();
-  const description = String(formData.get('description') || '').trim();
+  const description = normalizeNullableValue(formData.get('description'));
+  const short_text = normalizeNullableValue(formData.get('short_text'));
   const content_type = String(formData.get('content_type') || '').trim();
   const status = String(formData.get('status') || '').trim();
   const audience = String(formData.get('audience') || '').trim();
-  const training_program_id =
-    String(formData.get('training_program_id') || '').trim() || null;
-  const workout_id = String(formData.get('workout_id') || '').trim() || null;
-  const exercise_id = String(formData.get('exercise_id') || '').trim() || null;
-  const external_url =
-    String(formData.get('external_url') || '').trim() || null;
+  const training_program_id = normalizeNullableValue(
+    formData.get('training_program_id')
+  );
+  const workout_id = normalizeNullableValue(formData.get('workout_id'));
+  const exercise_id = normalizeNullableValue(formData.get('exercise_id'));
+  const external_url = normalizeNullableValue(formData.get('external_url'));
+  const is_primary = normalizeCheckboxValue(formData.get('is_primary'));
 
   const file = formData.get('file');
 
@@ -55,7 +66,8 @@ export async function createContentPost(formData: FormData) {
 
   const { error } = await supabase.from('content_posts').insert({
     title,
-    description: description || null,
+    description,
+    short_text,
     content_type,
     status,
     audience,
@@ -64,6 +76,7 @@ export async function createContentPost(formData: FormData) {
     exercise_id,
     external_url,
     file_url,
+    is_primary,
   });
 
   if (error) {
@@ -73,6 +86,8 @@ export async function createContentPost(formData: FormData) {
 
   revalidatePath('/content');
   revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard/compete');
+  revalidatePath('/dashboard/workout');
 
   redirect('/content');
 }
@@ -82,18 +97,21 @@ export async function updateContentPost(formData: FormData) {
 
   const id = String(formData.get('id') || '').trim();
   const title = String(formData.get('title') || '').trim();
-  const description = String(formData.get('description') || '').trim();
+  const description = normalizeNullableValue(formData.get('description'));
+  const short_text = normalizeNullableValue(formData.get('short_text'));
   const content_type = String(formData.get('content_type') || '').trim();
   const status = String(formData.get('status') || '').trim();
   const audience = String(formData.get('audience') || '').trim();
-  const training_program_id =
-    String(formData.get('training_program_id') || '').trim() || null;
-  const workout_id = String(formData.get('workout_id') || '').trim() || null;
-  const exercise_id = String(formData.get('exercise_id') || '').trim() || null;
-  const external_url =
-    String(formData.get('external_url') || '').trim() || null;
-  const existing_file_url =
-    String(formData.get('existing_file_url') || '').trim() || null;
+  const training_program_id = normalizeNullableValue(
+    formData.get('training_program_id')
+  );
+  const workout_id = normalizeNullableValue(formData.get('workout_id'));
+  const exercise_id = normalizeNullableValue(formData.get('exercise_id'));
+  const external_url = normalizeNullableValue(formData.get('external_url'));
+  const existing_file_url = normalizeNullableValue(
+    formData.get('existing_file_url')
+  );
+  const is_primary = normalizeCheckboxValue(formData.get('is_primary'));
 
   const file = formData.get('file');
 
@@ -137,7 +155,8 @@ export async function updateContentPost(formData: FormData) {
     .from('content_posts')
     .update({
       title,
-      description: description || null,
+      description,
+      short_text,
       content_type,
       status,
       audience,
@@ -146,6 +165,7 @@ export async function updateContentPost(formData: FormData) {
       exercise_id,
       external_url,
       file_url,
+      is_primary,
     })
     .eq('id', id);
 
@@ -156,6 +176,8 @@ export async function updateContentPost(formData: FormData) {
 
   revalidatePath('/content');
   revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard/compete');
+  revalidatePath('/dashboard/workout');
 
   redirect('/content');
 }

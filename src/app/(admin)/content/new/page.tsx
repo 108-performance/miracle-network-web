@@ -32,27 +32,41 @@ export default async function NewContentPage() {
   }
 
   return (
-    <div className="p-6 max-w-2xl">
-      <h1 className="text-2xl font-bold mb-6">Upload Content</h1>
+    <div className="max-w-2xl p-6">
+      <h1 className="mb-2 text-2xl font-bold">Upload Content</h1>
+
+      <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+        <p className="font-medium text-zinc-900">Athlete Intel rule</p>
+        <p className="mt-1">
+          For workout-level Athlete Intel, choose a workout and leave exercise blank.
+        </p>
+      </div>
 
       <form action={createContentPost} className="space-y-4">
         <input
           name="title"
           placeholder="Content Title"
-          className="w-full border p-2 rounded"
+          className="w-full rounded border p-2"
           required
         />
 
         <textarea
           name="description"
           placeholder="Description"
-          className="w-full border p-2 rounded"
+          className="w-full rounded border p-2"
           rows={4}
+        />
+
+        <textarea
+          name="short_text"
+          placeholder="Short text (optional, used for concise Athlete Intel copy)"
+          className="w-full rounded border p-2"
+          rows={3}
         />
 
         <select
           name="content_type"
-          className="w-full border p-2 rounded"
+          className="w-full rounded border p-2"
           defaultValue="video"
         >
           <option value="video">Video</option>
@@ -63,7 +77,7 @@ export default async function NewContentPage() {
 
         <select
           name="status"
-          className="w-full border p-2 rounded"
+          className="w-full rounded border p-2"
           defaultValue="draft"
         >
           <option value="draft">Draft</option>
@@ -72,8 +86,8 @@ export default async function NewContentPage() {
 
         <select
           name="audience"
-          className="w-full border p-2 rounded"
-          defaultValue="both"
+          className="w-full rounded border p-2"
+          defaultValue="athletes"
         >
           <option value="athletes">Athletes</option>
           <option value="coaches">Coaches</option>
@@ -84,7 +98,7 @@ export default async function NewContentPage() {
           <label className="block text-sm font-medium">Training Program</label>
           <select
             name="training_program_id"
-            className="w-full border p-2 rounded"
+            className="w-full rounded border p-2"
             defaultValue=""
           >
             <option value="">No program selected</option>
@@ -100,7 +114,7 @@ export default async function NewContentPage() {
           <label className="block text-sm font-medium">Workout</label>
           <select
             name="workout_id"
-            className="w-full border p-2 rounded"
+            className="w-full rounded border p-2"
             defaultValue=""
           >
             <option value="">No workout selected</option>
@@ -111,13 +125,16 @@ export default async function NewContentPage() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-zinc-500">
+            Choose a workout for workout-level Athlete Intel.
+          </p>
         </div>
 
         <div className="space-y-2">
           <label className="block text-sm font-medium">Exercise</label>
           <select
             name="exercise_id"
-            className="w-full border p-2 rounded"
+            className="w-full rounded border p-2"
             defaultValue=""
           >
             <option value="">No exercise selected</option>
@@ -127,29 +144,43 @@ export default async function NewContentPage() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-zinc-500">
+            Leave blank for workout-level Athlete Intel.
+          </p>
         </div>
 
         <input
           name="external_url"
-          placeholder="External Video URL (for video content)"
-          className="w-full border p-2 rounded"
+          placeholder="External Video URL (Vimeo embed-safe URL preferred)"
+          className="w-full rounded border p-2"
         />
 
-        <div className="space-y-2">
-          <label className="block text-sm font-medium">
-            Upload Image / PDF
+        <div className="flex items-center gap-2 rounded border p-3">
+          <input
+            id="is_primary"
+            name="is_primary"
+            type="checkbox"
+            value="true"
+            className="h-4 w-4"
+          />
+          <label htmlFor="is_primary" className="text-sm">
+            Mark as primary content
           </label>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">Upload Image / PDF</label>
           <input
             name="file"
             type="file"
             accept="image/*,.pdf"
-            className="w-full border p-2 rounded"
+            className="w-full rounded border p-2"
           />
         </div>
 
         <button
           type="submit"
-          className="bg-black text-white px-4 py-2 rounded"
+          className="rounded bg-black px-4 py-2 text-white"
         >
           Save Content
         </button>

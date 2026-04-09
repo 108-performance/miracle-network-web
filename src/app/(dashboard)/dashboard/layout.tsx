@@ -14,28 +14,48 @@ export default async function DashboardLayout({
 }: DashboardLayoutProps) {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
 
-  const { data: challengeProgram } = await supabase
-    .from('training_programs')
-    .select('id')
-    .eq('id', CHALLENGE_PROGRAM_ID)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase.auth.getUser();
+
+    if (!error) {
+      user = data.user;
+    }
+  } catch {
+    user = null;
+  }
+
+  let challengeProgram: { id: string } | null = null;
+
+  try {
+    const { data } = await supabase
+      .from('training_programs')
+      .select('id')
+      .eq('id', CHALLENGE_PROGRAM_ID)
+      .maybeSingle();
+
+    challengeProgram = data ?? null;
+  } catch {
+    challengeProgram = null;
+  }
 
   let firstWorkoutId: string | null = null;
 
   if (challengeProgram?.id) {
-    const { data: firstWorkout } = await supabase
-      .from('workouts')
-      .select('id')
-      .eq('training_program_id', challengeProgram.id)
-      .order('day_order', { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    try {
+      const { data: firstWorkout } = await supabase
+        .from('workouts')
+        .select('id')
+        .eq('training_program_id', challengeProgram.id)
+        .order('day_order', { ascending: true })
+        .limit(1)
+        .maybeSingle();
 
-    firstWorkoutId = firstWorkout?.id ?? null;
+      firstWorkoutId = firstWorkout?.id ?? null;
+    } catch {
+      firstWorkoutId = null;
+    }
   }
 
   const homeHref = '/';
