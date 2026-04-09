@@ -32,62 +32,81 @@ export async function saveWorkoutSessionAction(
 ) {
   const supabase = await createClient();
 
-  // --------------------------
-  // 1. Get auth user safely
-  // --------------------------
   let authUser = null;
 
   try {
     const { data, error } = await supabase.auth.getUser();
+
     if (error || !data.user) {
       throw new Error('User not authenticated');
     }
+
     authUser = data.user;
   } catch {
     throw new Error('You must be logged in to save a workout session.');
   }
 
-  // --------------------------
-  // 2. Ensure public.users row exists
-  // --------------------------
-  let appUser = null;
+  let appUser: { id: string } | null = null;
 
-  const { data: existingUser } = await supabase
+  const { data: existingUserById, error: existingUserByIdError } = await supabase
     .from('users')
     .select('id')
     .eq('id', authUser.id)
     .maybeSingle();
 
-  if (existingUser) {
-    appUser = existingUser;
-  } else {
-    const { data: createdUser, error: createUserError } = await supabase
-      .from('users')
-      .insert({
-        id: authUser.id,
-        email: authUser.email,
-      })
-      .select('id')
-      .single();
-
-    if (createUserError || !createdUser) {
-      console.error('users create error:', createUserError);
-      throw new Error('Failed to create user record.');
-    }
-
-    appUser = createdUser;
+  if (existingUserByIdError) {
+    console.error('users lookup by id error:', existingUserByIdError);
+    throw new Error('Failed to load user record.');
   }
 
-  // --------------------------
-  // 3. Ensure athlete exists
-  // --------------------------
-  let athlete = null;
+  if (existingUserById) {
+    appUser = existingUserById;
+  } else {
+    const { data: existingUserByEmail, error: existingUserByEmailError } =
+      await supabase
+        .from('users')
+        .select('id')
+        .eq('email', authUser.email ?? '')
+        .maybeSingle();
 
-  const { data: existingAthlete } = await supabase
+    if (existingUserByEmailError) {
+      console.error('users lookup by email error:', existingUserByEmailError);
+      throw new Error('Failed to load user record.');
+    }
+
+    if (existingUserByEmail) {
+      appUser = existingUserByEmail;
+    } else {
+      const { data: createdUser, error: createUserError } = await supabase
+        .from('users')
+        .insert({
+          id: authUser.id,
+          email: authUser.email,
+        })
+        .select('id')
+        .single();
+
+      if (createUserError || !createdUser) {
+        console.error('users create error:', createUserError);
+        throw new Error('Failed to create user record.');
+      }
+
+      appUser = createdUser;
+    }
+  }
+
+  let athlete: { id: string } | null = null;
+
+  const { data: existingAthlete, error: existingAthleteError } = await supabase
     .from('athletes')
     .select('id')
     .eq('user_id', appUser.id)
     .maybeSingle();
+
+  if (existingAthleteError) {
+    console.error('athlete lookup error:', existingAthleteError);
+    throw new Error('Failed to load athlete profile.');
+  }
 
   if (existingAthlete) {
     athlete = existingAthlete;
@@ -108,9 +127,6 @@ export async function saveWorkoutSessionAction(
     athlete = createdAthlete;
   }
 
-  // --------------------------
-  // 4. Create workout log
-  // --------------------------
   const { data: workoutLog, error: workoutLogError } = await supabase
     .from('workout_logs')
     .insert({
@@ -126,9 +142,6 @@ export async function saveWorkoutSessionAction(
     throw new Error('Failed to save workout completion.');
   }
 
-  // --------------------------
-  // 5. Create exercise logs
-  // --------------------------
   const rowsToInsert = input.exercises
     .map((item) => {
       const actual_reps = toNumberOrNull(item.reps);
@@ -168,9 +181,6 @@ export async function saveWorkoutSessionAction(
     }
   }
 
-  // --------------------------
-  // 6. Revalidate
-  // --------------------------
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/workout');
   revalidatePath(`/dashboard/workout/${input.elementSlug}/${input.levelSlug}`);
