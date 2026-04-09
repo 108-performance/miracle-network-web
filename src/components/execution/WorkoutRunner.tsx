@@ -125,42 +125,67 @@ function InlineVideoPlayer({
   title?: string;
   className?: string;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
   const embedUrl = getVimeoEmbedUrl(url);
 
-  if (!url) return null;
+  if (!embedUrl) return null;
 
-  if (!embedUrl) {
-    return (
-      <div
-        className={`rounded-2xl border border-white/10 bg-zinc-950/90 p-4 text-center ${className}`}
-      >
-        <p className="text-sm text-zinc-400">Video available</p>
-        <a
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
-        >
-          Open Video
-        </a>
-      </div>
-    );
-  }
+  const fullscreenUrl = embedUrl.includes('?')
+    ? `${embedUrl}&autoplay=1`
+    : `${embedUrl}?autoplay=1`;
 
   return (
-    <div
-      className={`overflow-hidden rounded-2xl border border-white/10 bg-black ${className}`}
-    >
-      <div className="relative w-full pt-[56.25%]">
-        <iframe
-          src={embedUrl}
-          title={title}
-          className="absolute inset-0 h-full w-full"
-          allow="autoplay; fullscreen; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
-    </div>
+    <>
+      <button
+        type="button"
+        onClick={() => setIsOpen(true)}
+        className={`group relative block w-full overflow-hidden rounded-3xl border border-white/10 bg-black shadow-[0_0_20px_rgba(255,255,255,0.03)] transition-transform active:scale-[0.98] ${className}`}
+      >
+        <div className="relative mx-auto w-full max-w-[600px]">
+          <div className="relative w-full pt-[177.78%]">
+            <iframe
+              src={embedUrl}
+              title={title}
+              className="pointer-events-none absolute inset-0 h-full w-full opacity-95"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        </div>
+      </button>
+
+      {isOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/95">
+          <div className="flex items-center justify-between px-4 py-4 sm:px-6">
+            <p className="truncate pr-4 text-sm font-medium text-white/75">
+              {title}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Close
+            </button>
+          </div>
+
+          <div className="flex h-[calc(100%-72px)] items-center justify-center px-4 pb-6">
+            <div className="h-full w-full max-w-[520px]">
+              <div className="relative h-full w-full">
+                <iframe
+                  src={fullscreenUrl}
+                  title={title}
+                  className="absolute inset-0 h-full w-full rounded-2xl"
+                  allow="autoplay; fullscreen; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -671,7 +696,17 @@ export default function WorkoutRunner({
   const bestValue = getMetricValueFromSnapshot(current.bestResult, primaryMetricType);
 
   return (
-    <div className="mx-auto max-w-xl">
+    <div className="mx-auto w-full max-w-3xl px-4">
+      <div className="mb-6 text-center">
+        <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
+          {current.name}
+        </h1>
+
+        {prescriptionText ? (
+          <p className="mt-3 text-lg text-zinc-400">{prescriptionText}</p>
+        ) : null}
+      </div>
+
       <div className="mb-6">
         <div className="mb-3 h-1.5 w-full rounded-full bg-zinc-800">
           <div
@@ -685,15 +720,11 @@ export default function WorkoutRunner({
         </p>
       </div>
 
-      <div className="mb-10 text-center">
-        <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
-          {current.name}
-        </h1>
-
-        {prescriptionText ? (
-          <p className="mt-3 text-lg text-zinc-400">{prescriptionText}</p>
-        ) : null}
-      </div>
+      {currentContent.length > 0 && currentContent[0]?.url ? (
+        <div className="mb-10">
+          <InlineVideoPlayer url={currentContent[0].url} title={current.name} />
+        </div>
+      ) : null}
 
       <div className="mb-10">
         <p className="mb-3 text-xs uppercase tracking-[0.18em] text-zinc-500">
@@ -738,12 +769,6 @@ export default function WorkoutRunner({
           </div>
         </div>
       )}
-
-      {currentContent.length > 0 && currentContent[0]?.url ? (
-        <div className="mb-10">
-          <InlineVideoPlayer url={currentContent[0].url} title={current.name} />
-        </div>
-      ) : null}
 
       {errorMessage ? (
         <p className="mb-4 text-center text-sm text-red-400">{errorMessage}</p>
