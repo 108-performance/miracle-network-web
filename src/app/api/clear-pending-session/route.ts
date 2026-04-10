@@ -4,7 +4,7 @@ import { cookies } from 'next/headers';
 const PENDING_SESSION_COOKIE = 'mn_pending_session';
 
 export async function POST() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   cookieStore.set(PENDING_SESSION_COOKIE, '', {
     path: '/',
