@@ -1,11 +1,11 @@
 import QuickActionsClient from '@/components/dashboard/QuickActionsClient';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
+import { getDashboardState } from '@/core/protected/dashboard/getDashboardState';
 
 export const dynamic = 'force-dynamic';
 
 const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
-const DEFAULT_CHALLENGE_TOTAL = 8;
 
 type LatestWorkoutLog = {
   id: string;
@@ -24,167 +24,15 @@ type ChallengeWorkoutRow = {
   day_order: number | null;
 };
 
-function getStartOfDay(date: Date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function getDaysAgoFromNow(dateString: string | null) {
-  if (!dateString) return null;
-
-  const now = new Date();
-  const target = new Date(dateString);
-
-  const nowStart = getStartOfDay(now);
-  const targetStart = getStartOfDay(target);
-
-  const diffMs = nowStart.getTime() - targetStart.getTime();
-  return Math.floor(diffMs / 86400000);
-}
-
-function calculateStreak(logs: CompletedLogRow[]) {
-  if (!logs || logs.length === 0) return 0;
-
-  const uniqueDays = new Set(
-    logs.map((log) => {
-      const d = new Date(log.completed_at);
-      d.setHours(0, 0, 0, 0);
-      return d.getTime();
-    })
-  );
-
-  const sortedDays = Array.from(uniqueDays).sort((a, b) => b - a);
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  let streak = 0;
-
-  for (let i = 0; i < sortedDays.length; i++) {
-    const expectedDay = new Date(today);
-    expectedDay.setDate(today.getDate() - i);
-    expectedDay.setHours(0, 0, 0, 0);
-
-    if (sortedDays[i] === expectedDay.getTime()) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-
-  return streak;
-}
-
-function getRelativeDayLabel(daysAgo: number | null) {
-  if (daysAgo === null) return 'No session logged yet';
-  if (daysAgo === 0) return 'Completed today';
-  if (daysAgo === 1) return 'Completed yesterday';
-  return `Completed ${daysAgo} days ago`;
-}
-
-function getStreakBadgeLabel(streakCount: number, daysAgo: number | null) {
-  if (streakCount > 1) return `🔥 ${streakCount} day streak`;
-  if (streakCount === 1 && daysAgo === 0) return '🔥 1 day streak';
-  if (daysAgo === 1) return 'Train today';
-  return 'Start your streak';
-}
-
-function getMomentumTitle(streakCount: number) {
-  if (streakCount >= 3) return 'You’re building real momentum.';
-  if (streakCount === 2) return 'You’re building momentum.';
-  return 'Build momentum today.';
-}
-
-function getMomentumLine(streakCount: number) {
-  if (streakCount >= 3) return 'Consistency is starting to stack.';
-  if (streakCount === 2) return 'One more day makes this feel real.';
-  return 'A quick session today gets you moving again.';
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function getChallengeHeroState({
-  daysAgo,
-  streakCount,
-  completedCount,
-  totalCount,
-}: {
-  daysAgo: number | null;
-  streakCount: number;
-  completedCount: number;
-  totalCount: number;
-}) {
-  const safeTotal = totalCount > 0 ? totalCount : DEFAULT_CHALLENGE_TOTAL;
-  const nextDay = clamp(completedCount + 1, 1, safeTotal);
-
-  if (daysAgo === null) {
-    return {
-      headline: 'Start Day 1.',
-      subtext: 'Begin your 108 Athlete Challenge.',
-      ctaLabel: 'Start Challenge',
-      ctaHref: '/dashboard/compete/108-athlete-challenge',
-      ringLabelTop: `0 of ${safeTotal}`,
-      ringLabelBottom: 'Days Complete',
-    };
-  }
-
-  if (daysAgo === 0) {
-    return {
-      headline:
-        completedCount >= safeTotal
-          ? 'Challenge complete.'
-          : `Day ${nextDay} is ready.`,
-      subtext:
-        completedCount >= safeTotal
-          ? 'Great work. Reset and go again when you’re ready.'
-          : streakCount > 1
-            ? `${streakCount} day streak. Keep it rolling.`
-            : 'You showed up today. Keep it going.',
-      ctaLabel:
-        completedCount >= safeTotal ? 'View Challenge' : 'Continue Challenge',
-      ctaHref: '/dashboard/compete/108-athlete-challenge',
-      ringLabelTop: `${completedCount} of ${safeTotal}`,
-      ringLabelBottom: 'Days Complete',
-    };
-  }
-
-  if (daysAgo === 1) {
-    return {
-      headline: `Day ${nextDay} is ready.`,
-      subtext:
-        streakCount > 1
-          ? `${streakCount} day streak. Keep it alive today.`
-          : 'You trained yesterday. Keep it moving today.',
-      ctaLabel: 'Continue Challenge',
-      ctaHref: '/dashboard/compete/108-athlete-challenge',
-      ringLabelTop: `${completedCount} of ${safeTotal}`,
-      ringLabelBottom: 'Days Complete',
-    };
-  }
-
-  if (daysAgo <= 3) {
-    return {
-      headline: `Day ${nextDay} is ready.`,
-      subtext: 'Continue your 108 Athlete Challenge.',
-      ctaLabel: 'Continue Challenge',
-      ctaHref: '/dashboard/compete/108-athlete-challenge',
-      ringLabelTop: `${completedCount} of ${safeTotal}`,
-      ringLabelBottom: 'Days Complete',
-    };
-  }
-
-  return {
-    headline: 'Start again today.',
-    subtext: 'A quick session gets momentum moving again.',
-    ctaLabel: 'Restart Momentum',
-    ctaHref: '/dashboard/compete/108-athlete-challenge',
-    ringLabelTop: `${completedCount} of ${safeTotal}`,
-    ringLabelBottom: 'Days Complete',
-  };
-}
+type ExerciseLogRow = {
+  athlete_id?: string;
+  actual_reps?: number | null;
+  actual_time_seconds?: number | null;
+  actual_score?: number | null;
+  actual_exit_velocity?: number | null;
+  completed: boolean | null;
+  created_at: string;
+};
 
 function InfoCard({
   eyebrow,
@@ -220,75 +68,68 @@ function InfoCard({
   );
 }
 
-function HeroProgressRing({
-  completed,
-  total,
+function WeeklyProgressRing({
+  current,
+  goal,
+  percent,
 }: {
-  completed: number;
-  total: number;
+  current: number;
+  goal: number;
+  percent: number;
 }) {
-  const safeTotal = total > 0 ? total : DEFAULT_CHALLENGE_TOTAL;
-  const safeCompleted = clamp(completed, 0, safeTotal);
-  const radius = 62;
+  const safePercent = Math.max(0, Math.min(percent, 100));
+  const radius = 72;
   const circumference = 2 * Math.PI * radius;
-  const progress = safeTotal > 0 ? safeCompleted / safeTotal : 0;
-  const dashOffset = circumference * (1 - progress);
+  const dashOffset = circumference * (1 - safePercent / 100);
 
   return (
-    <div className="relative ml-auto -mt-6 h-[160px] w-[160px] sm:-mt-40 sm:h-[200px] sm:w-[200px]">
-      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(132,204,22,0.18),_rgba(0,0,0,0)_70%)] blur-[2px]" />
+    <div className="relative ml-auto h-[220px] w-[220px] sm:h-[260px] sm:w-[260px]">
+      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(132,204,22,0.22),_rgba(132,204,22,0.06)_35%,_rgba(0,0,0,0)_72%)] blur-[4px]" />
+
       <svg
-        viewBox="0 0 160 160"
+        viewBox="0 0 220 220"
         className="absolute inset-0 h-full w-full -rotate-90"
       >
         <circle
-          cx="80"
-          cy="80"
+          cx="110"
+          cy="110"
           r={radius}
           fill="none"
-          stroke="rgba(255,255,255,0.12)"
-          strokeWidth="10"
+          stroke="rgba(255,255,255,0.08)"
+          strokeWidth="14"
         />
         <circle
-          cx="80"
-          cy="80"
+          cx="110"
+          cy="110"
           r={radius}
           fill="none"
           stroke="rgb(163 230 53)"
-          strokeWidth="10"
+          strokeWidth="14"
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={dashOffset}
+          style={{
+            filter: 'drop-shadow(0 0 10px rgba(163,230,53,0.45))',
+            transition: 'stroke-dashoffset 500ms ease',
+          }}
         />
       </svg>
 
-      <div className="absolute inset-[22px] flex flex-col items-center justify-center rounded-full border border-white/10 bg-black/70 backdrop-blur-sm">
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          className="mb-2 h-7 w-7 text-white/85"
-        >
-          <path
-            d="M7 16.5c1.8.7 4.2.7 6 0 2.4-1 4-3.4 4-6.2 0-.6-.1-1.2-.3-1.8-.4.2-.8.3-1.3.3-2.2 0-4-1.8-4-4 0-.4.1-.9.2-1.3-.4-.1-.8-.1-1.2-.1-4.1 0-7.4 3.3-7.4 7.4 0 2.4 1.5 4.6 4 5.7Z"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M8.5 11.5 11 14l5-5"
-            stroke="currentColor"
-            strokeWidth="1.7"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-
-        <p className="text-3xl font-bold text-white">
-          {safeCompleted} of {safeTotal}
+      <div className="absolute inset-[30px] flex flex-col items-center justify-center rounded-full border border-white/10 bg-black/75 backdrop-blur-md text-center">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+          Weekly Goal
         </p>
-        <p className="mt-1 text-center text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-400">
-          Days Complete
+
+        <p className="mt-2 text-5xl font-extrabold leading-none text-white">
+          {safePercent}%
+        </p>
+
+        <p className="mt-2 text-sm font-medium text-zinc-300">
+          {current} / {goal}
+        </p>
+
+        <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-500">
+          weekly units
         </p>
       </div>
     </div>
@@ -324,18 +165,18 @@ export default async function DashboardPage() {
         </div>
 
         <section className="mb-6 overflow-hidden rounded-[32px] border border-lime-400/20 bg-[radial-gradient(circle_at_top_right,_rgba(132,204,22,0.18),_rgba(0,0,0,0.96)_55%)] p-5 sm:p-7">
-          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_240px]">
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
             <div>
               <p className="inline-flex rounded-full bg-lime-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
                 Today’s Focus
               </p>
 
               <h2 className="mt-5 max-w-2xl text-3xl font-extrabold leading-tight text-white sm:text-5xl">
-                Start Day 1.
+                Start your week strong.
               </h2>
 
               <p className="mt-3 max-w-2xl text-base text-zinc-300 sm:text-lg">
-                Begin your 108 Athlete Challenge.
+                Your weekly training goal starts with the first work you log.
               </p>
 
               <div className="mt-6">
@@ -343,12 +184,12 @@ export default async function DashboardPage() {
                   href="/dashboard/compete/108-athlete-challenge"
                   className="inline-flex items-center justify-center rounded-2xl bg-lime-400 px-6 py-3 text-sm font-bold text-black shadow-[0_0_20px_rgba(132,204,22,0.25)] transition hover:opacity-90"
                 >
-                  Start Challenge
+                  Continue Training
                 </Link>
               </div>
             </div>
 
-            <HeroProgressRing completed={0} total={DEFAULT_CHALLENGE_TOTAL} />
+            <WeeklyProgressRing current={0} goal={1000} percent={0} />
           </div>
         </section>
 
@@ -413,6 +254,24 @@ export default async function DashboardPage() {
     console.error('DASHBOARD challengeWorkoutsError', challengeWorkoutsError);
   }
 
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+  const { data: weeklyExerciseLogs, error: weeklyExerciseLogsError } =
+    await supabase
+      .from('exercise_logs')
+      .select(
+        'athlete_id, actual_reps, actual_time_seconds, actual_score, actual_exit_velocity, completed, created_at'
+      )
+      .eq('athlete_id', athleteId)
+      .gte('created_at', thirtyDaysAgo.toISOString())
+      .order('created_at', { ascending: false });
+
+  if (weeklyExerciseLogsError) {
+    console.error('DASHBOARD weeklyExerciseLogsError', weeklyExerciseLogsError);
+  }
+
   const { data: quickIntros, error: quickIntrosError } = await supabase
     .from('content_posts')
     .select('title, external_url, system_key, audience')
@@ -425,7 +284,13 @@ export default async function DashboardPage() {
   }
 
   const normalizedCompletedLogs = (completedLogs ?? []) as CompletedLogRow[];
-  const streakCount = calculateStreak(normalizedCompletedLogs);
+  const challengeWorkoutRows = (challengeWorkouts ?? []) as ChallengeWorkoutRow[];
+  const weeklyExerciseLogRows = (weeklyExerciseLogs ?? []) as ExerciseLogRow[];
+
+  console.log('DASHBOARD athleteId', athleteId);
+  console.log('DASHBOARD weeklyExerciseLogRows', weeklyExerciseLogRows);
+
+  let latestWorkoutTitle = '108 Athlete Challenge Session';
 
   const latestWorkoutLog: LatestWorkoutLog | null =
     normalizedCompletedLogs.length > 0
@@ -435,23 +300,6 @@ export default async function DashboardPage() {
           workout_id: normalizedCompletedLogs[0].workout_id,
         }
       : null;
-
-  const challengeWorkoutRows = (challengeWorkouts ?? []) as ChallengeWorkoutRow[];
-  const challengeWorkoutIds = new Set(challengeWorkoutRows.map((row) => row.id));
-
-  const completedChallengeWorkoutIds = new Set(
-    normalizedCompletedLogs
-      .map((log) => log.workout_id)
-      .filter((id): id is string => Boolean(id && challengeWorkoutIds.has(id)))
-  );
-
-  const challengeCompletedCount = completedChallengeWorkoutIds.size;
-  const challengeTotalCount =
-    challengeWorkoutRows.length > 0
-      ? challengeWorkoutRows.length
-      : DEFAULT_CHALLENGE_TOTAL;
-
-  let latestWorkoutTitle = '108 Athlete Challenge Session';
 
   if (latestWorkoutLog?.workout_id) {
     const matchingChallengeWorkout = challengeWorkoutRows.find(
@@ -477,28 +325,27 @@ export default async function DashboardPage() {
     }
   }
 
-  const daysAgo = getDaysAgoFromNow(latestWorkoutLog?.completed_at ?? null);
-  const lastWorkoutLabel = getRelativeDayLabel(daysAgo);
-  const streakBadgeLabel = getStreakBadgeLabel(streakCount, daysAgo);
-
-  const heroState = getChallengeHeroState({
-    daysAgo,
-    streakCount,
-    completedCount: challengeCompletedCount,
-    totalCount: challengeTotalCount,
+  const dashboardState = getDashboardState({
+    completedLogs: normalizedCompletedLogs,
+    challengeWorkouts: challengeWorkoutRows,
+    latestWorkoutTitle,
+    latestScore: latestScore?.score ?? null,
+    weeklyExerciseLogs: weeklyExerciseLogRows,
   });
 
-  const momentumTitle = getMomentumTitle(streakCount);
-  const momentumLine = getMomentumLine(streakCount);
+  console.log('DASHBOARD heroState', dashboardState.heroState);
 
-  const lastSessionReflection =
-    daysAgo === 0
-      ? 'You completed this session today.'
-      : daysAgo === 1
-        ? 'You trained yesterday. Stay consistent.'
-        : daysAgo === null
-          ? 'Start your first session to begin tracking progress.'
-          : 'Pick this back up today.';
+  const {
+    daysAgo,
+    streakCount,
+    lastWorkoutLabel,
+    streakBadgeLabel,
+    heroState,
+    momentumTitle,
+    momentumLine,
+    lastSessionReflection,
+    latestScoreLabel,
+  } = dashboardState;
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl bg-black px-6 py-8 text-white">
@@ -522,13 +369,7 @@ export default async function DashboardPage() {
 
       <section className="relative mb-6 overflow-hidden rounded-[32px] border border-lime-400/20 bg-[radial-gradient(circle_at_top_right,_rgba(132,204,22,0.20),_rgba(0,0,0,0.96)_54%)] p-5 sm:p-7">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,transparent_40%,rgba(132,204,22,0.05)_70%,transparent_100%)]" />
-        <div className="pointer-events-none absolute right-[22%] top-1/2 hidden h-28 w-40 -translate-y-1/2 opacity-20 lg:block">
-          <div className="absolute left-0 top-1/2 h-10 w-10 -translate-y-1/2 rotate-45 border-r border-t border-lime-400/30" />
-          <div className="absolute left-10 top-1/2 h-10 w-10 -translate-y-1/2 rotate-45 border-r border-t border-lime-400/20" />
-          <div className="absolute left-20 top-1/2 h-10 w-10 -translate-y-1/2 rotate-45 border-r border-t border-lime-400/10" />
-        </div>
-
-        <div className="relative grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_240px]">
+        <div className="relative grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div>
             <p className="inline-flex rounded-full bg-lime-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
               Today’s Focus
@@ -542,6 +383,13 @@ export default async function DashboardPage() {
               {heroState.subtext}
             </p>
 
+            <div className="mt-5 space-y-2">
+              <p className="text-sm font-medium text-white">
+                {heroState.progressLabel}
+              </p>
+              <p className="text-sm text-zinc-400">{heroState.supportLabel}</p>
+            </div>
+
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
                 href={heroState.ctaHref}
@@ -554,14 +402,15 @@ export default async function DashboardPage() {
                 href="/dashboard/compete/108-athlete-challenge"
                 className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
               >
-                View Plan
+                View Challenge
               </Link>
             </div>
           </div>
 
-          <HeroProgressRing
-            completed={challengeCompletedCount}
-            total={challengeTotalCount}
+          <WeeklyProgressRing
+            current={heroState.progressCurrent}
+            goal={heroState.progressGoal}
+            percent={heroState.progressPercent}
           />
         </div>
       </section>
@@ -607,7 +456,7 @@ export default async function DashboardPage() {
                     Latest Score
                   </p>
                   <p className="mt-1 text-sm font-medium text-white">
-                    {latestScore?.score ?? 'No score yet'}
+                    {latestScoreLabel}
                   </p>
                 </div>
               </div>
@@ -621,7 +470,9 @@ export default async function DashboardPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">
             Quick Actions
           </p>
-          <p className="mt-1 text-sm text-zinc-500">Jump into what matters most.</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            Jump into what matters most.
+          </p>
         </div>
 
         <QuickActionsClient intros={quickIntros || []} />
