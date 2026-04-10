@@ -23,6 +23,7 @@ export async function createContentPost(formData: FormData) {
   const status = String(formData.get('status') || '').trim();
   const audience = String(formData.get('audience') || '').trim();
   const intel_type = normalizeNullableValue(formData.get('intel_type'));
+  const system_key = normalizeNullableValue(formData.get('system_key'));
   const training_program_id = normalizeNullableValue(
     formData.get('training_program_id')
   );
@@ -73,6 +74,7 @@ export async function createContentPost(formData: FormData) {
     status,
     audience,
     intel_type,
+    system_key,
     training_program_id,
     workout_id,
     exercise_id,
@@ -87,9 +89,12 @@ export async function createContentPost(formData: FormData) {
   }
 
   revalidatePath('/content');
-  revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/train');
   revalidatePath('/dashboard/compete');
   revalidatePath('/dashboard/workout');
+  revalidatePath('/dashboard/improve');
+  revalidatePath('/dashboard/training');
 
   redirect('/content');
 }
@@ -105,6 +110,7 @@ export async function updateContentPost(formData: FormData) {
   const status = String(formData.get('status') || '').trim();
   const audience = String(formData.get('audience') || '').trim();
   const intel_type = normalizeNullableValue(formData.get('intel_type'));
+  const system_key = normalizeNullableValue(formData.get('system_key'));
   const training_program_id = normalizeNullableValue(
     formData.get('training_program_id')
   );
@@ -164,6 +170,7 @@ export async function updateContentPost(formData: FormData) {
       status,
       audience,
       intel_type,
+      system_key,
       training_program_id,
       workout_id,
       exercise_id,
@@ -179,9 +186,12 @@ export async function updateContentPost(formData: FormData) {
   }
 
   revalidatePath('/content');
-  revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/train');
   revalidatePath('/dashboard/compete');
   revalidatePath('/dashboard/workout');
+  revalidatePath('/dashboard/improve');
+  revalidatePath('/dashboard/training');
 
   redirect('/content');
 }
@@ -206,9 +216,12 @@ export async function deleteContentPost(formData: FormData) {
   }
 
   revalidatePath('/content');
-  revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard');
+  revalidatePath('/dashboard/train');
   revalidatePath('/dashboard/compete');
   revalidatePath('/dashboard/workout');
+  revalidatePath('/dashboard/improve');
+  revalidatePath('/dashboard/training');
 
   redirect('/content');
 }

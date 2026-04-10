@@ -1,3 +1,4 @@
+import QuickActionsClient from '@/components/dashboard/QuickActionsClient';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 
@@ -183,127 +184,6 @@ function getChallengeHeroState({
     ringLabelTop: `${completedCount} of ${safeTotal}`,
     ringLabelBottom: 'Days Complete',
   };
-}
-
-type TileVariant = 'train' | 'compete' | 'improve' | 'workout';
-
-function TileIcon({ variant }: { variant: TileVariant }) {
-  const className = 'h-5 w-5';
-
-  if (variant === 'train') {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className={className}>
-        <path
-          d="M3 10h3l2-2 8 8-2 2v3"
-          stroke="currentColor"
-          strokeWidth="1.9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M14 5l5 5"
-          stroke="currentColor"
-          strokeWidth="1.9"
-          strokeLinecap="round"
-        />
-      </svg>
-    );
-  }
-
-  if (variant === 'compete') {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className={className}>
-        <path
-          d="M12 4l2.2 4.5 5 .7-3.6 3.5.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.5 5-.7L12 4Z"
-          stroke="currentColor"
-          strokeWidth="1.9"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  if (variant === 'improve') {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" className={className}>
-        <path
-          d="M14 5a4 4 0 0 0 5 5l-9 9a2.2 2.2 0 0 1-3.1-3.1l9-9Z"
-          stroke="currentColor"
-          strokeWidth="1.9"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path
-        d="M12 4l7 4v8l-7 4-7-4V8l7-4Z"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M12 8v8M8.5 10l7 4"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function QuickActionTile({
-  href,
-  label,
-  subtext,
-  variant,
-}: {
-  href: string;
-  label: 'Train' | 'Compete' | 'Improve' | 'Workout';
-  subtext: string;
-  variant: TileVariant;
-}) {
-  const styles = {
-    train: {
-      border: 'border-lime-400/15',
-      iconBg: 'bg-lime-400/10',
-      iconColor: 'text-lime-400',
-    },
-    compete: {
-      border: 'border-fuchsia-400/15',
-      iconBg: 'bg-fuchsia-400/10',
-      iconColor: 'text-fuchsia-400',
-    },
-    improve: {
-      border: 'border-amber-400/15',
-      iconBg: 'bg-amber-400/10',
-      iconColor: 'text-amber-400',
-    },
-    workout: {
-      border: 'border-sky-400/15',
-      iconBg: 'bg-sky-400/10',
-      iconColor: 'text-sky-400',
-    },
-  }[variant];
-
-  return (
-    <Link
-      href={href}
-      className={`group rounded-[28px] border ${styles.border} bg-zinc-950/85 p-5 transition duration-200 hover:border-zinc-700`}
-    >
-      <div
-        className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-2xl ${styles.iconBg} ${styles.iconColor}`}
-      >
-        <TileIcon variant={variant} />
-      </div>
-
-      <h3 className="text-lg font-semibold text-white">{label}</h3>
-      <p className="mt-1 text-sm text-zinc-400">{subtext}</p>
-    </Link>
-  );
 }
 
 function InfoCard({
@@ -533,6 +413,17 @@ export default async function DashboardPage() {
     console.error('DASHBOARD challengeWorkoutsError', challengeWorkoutsError);
   }
 
+  const { data: quickIntros, error: quickIntrosError } = await supabase
+    .from('content_posts')
+    .select('title, external_url, system_key, audience')
+    .eq('intel_type', 'quick_action_intro')
+    .eq('status', 'published')
+    .in('audience', ['athletes', 'both']);
+
+  if (quickIntrosError) {
+    console.error('DASHBOARD quickIntrosError', quickIntrosError);
+  }
+
   const normalizedCompletedLogs = (completedLogs ?? []) as CompletedLogRow[];
   const streakCount = calculateStreak(normalizedCompletedLogs);
 
@@ -684,9 +575,9 @@ export default async function DashboardPage() {
           footer={
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
               <p className="text-4xl font-bold text-white">
-  {streakCount}
-  <span className="ml-2 text-lg text-zinc-400">day</span>
-</p>
+                {streakCount}
+                <span className="ml-2 text-lg text-zinc-400">day</span>
+              </p>
               <p className="mt-1 text-xs uppercase tracking-[0.14em] text-zinc-500">
                 Day Streak
               </p>
@@ -733,35 +624,7 @@ export default async function DashboardPage() {
           <p className="mt-1 text-sm text-zinc-500">Jump into what matters most.</p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <QuickActionTile
-            href="/dashboard/train"
-            label="Train"
-            subtext="Continue a workout"
-            variant="train"
-          />
-
-          <QuickActionTile
-            href="/dashboard/compete"
-            label="Compete"
-            subtext="Join a challenge"
-            variant="compete"
-          />
-
-          <QuickActionTile
-            href="/dashboard/improve"
-            label="Improve"
-            subtext="Targeted drills"
-            variant="improve"
-          />
-
-          <QuickActionTile
-            href="/dashboard/workout"
-            label="Workout"
-            subtext="Train specific skills"
-            variant="workout"
-          />
-        </div>
+        <QuickActionsClient intros={quickIntros || []} />
       </section>
     </main>
   );

@@ -52,6 +52,23 @@ function parsePendingSessionCookie(
   }
 }
 
+function dedupeExerciseRows<
+  T extends {
+    workout_exercise_id: string;
+  },
+>(rows: T[]) {
+  const seen = new Set<string>();
+  const deduped: T[] = [];
+
+  for (const row of rows) {
+    if (seen.has(row.workout_exercise_id)) continue;
+    seen.add(row.workout_exercise_id);
+    deduped.push(row);
+  }
+
+  return deduped;
+}
+
 export default async function ClaimFirstSessionPage({
   searchParams,
 }: ClaimFirstSessionPageProps) {
@@ -68,9 +85,20 @@ export default async function ClaimFirstSessionPage({
 
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+
+  try {
+    const {
+      data: { user: authUser },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (!error) {
+      user = authUser;
+    }
+  } catch {
+    user = null;
+  }
 
   if (!user) {
     redirect(
@@ -80,29 +108,62 @@ export default async function ClaimFirstSessionPage({
     );
   }
 
+  let appUser: { id: string } | null = null;
+
+  const { data: existingUserById } = await supabase
+    .from('users')
+    .select('id')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (existingUserById) {
+    appUser = existingUserById;
+  } else {
+    const { data: existingUserByEmail } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', user.email ?? '')
+      .maybeSingle();
+
+    if (existingUserByEmail) {
+      appUser = existingUserByEmail;
+    } else {
+      const { data: createdUser, error: createUserError } = await supabase
+        .from('users')
+        .insert({
+          id: user.id,
+          email: user.email,
+        })
+        .select('id')
+        .single();
+
+      if (createUserError || !createdUser) {
+        console.error('CLAIM FIRST SESSION users create error', createUserError);
+        redirect('/dashboard');
+      }
+
+      appUser = createdUser;
+    }
+  }
+
   let athleteId: string | null = null;
 
   const { data: existingAthlete } = await supabase
     .from('athletes')
     .select('id')
-    .eq('user_id', user.id)
+    .eq('user_id', appUser.id)
     .maybeSingle();
 
   if (existingAthlete?.id) {
     athleteId = existingAthlete.id;
   } else {
-    const { data: createdAthlete, error: athleteInsertError } = await supabase
+    const { data: createdAthlete } = await supabase
       .from('athletes')
       .insert({
-        user_id: user.id,
+        user_id: appUser.id,
       })
       .select('id')
       .maybeSingle();
-
-    if (athleteInsertError) {
-      console.error('CLAIM FIRST SESSION athlete insert error', athleteInsertError);
-      redirect('/dashboard');
-    }
 
     athleteId = createdAthlete?.id ?? null;
   }
@@ -123,26 +184,15 @@ export default async function ClaimFirstSessionPage({
   let workoutLogId = existingWorkoutLog?.id ?? null;
 
   if (!workoutLogId) {
-    const now = new Date().toISOString();
-
-    const { data: insertedWorkoutLog, error: workoutLogInsertError } = await supabase
+    const { data: insertedWorkoutLog } = await supabase
       .from('workout_logs')
       .insert({
         athlete_id: athleteId,
         workout_id: workoutId,
-        completed_at: now,
+        completed_at: new Date().toISOString(),
       })
       .select('id')
       .maybeSingle();
-
-    if (workoutLogInsertError) {
-      console.error(
-        'CLAIM FIRST SESSION workout log insert error',
-        workoutLogInsertError
-      );
-      cookieStore.delete(PENDING_SESSION_COOKIE);
-      redirect('/dashboard');
-    }
 
     workoutLogId = insertedWorkoutLog?.id ?? null;
   }
@@ -150,23 +200,23 @@ export default async function ClaimFirstSessionPage({
   if (
     workoutLogId &&
     pendingSession &&
-    pendingSession.workoutId === workoutId &&
-    pendingSession.exercises.length > 0
+    pendingSession.workoutId === workoutId
   ) {
-    const rowsToInsert = pendingSession.exercises
+    const rawRows = pendingSession.exercises
       .map((item) => {
         const actual_reps = toNumberOrNull(item.reps);
         const actual_time_seconds = toNumberOrNull(item.timeSeconds);
         const actual_score = toNumberOrNull(item.score);
         const actual_exit_velocity = toNumberOrNull(item.exitVelocity);
 
-        const hasAnyValue =
-          actual_reps !== null ||
-          actual_time_seconds !== null ||
-          actual_score !== null ||
-          actual_exit_velocity !== null;
-
-        if (!hasAnyValue) return null;
+        if (
+          actual_reps === null &&
+          actual_time_seconds === null &&
+          actual_score === null &&
+          actual_exit_velocity === null
+        ) {
+          return null;
+        }
 
         return {
           athlete_id: athleteId,
@@ -179,22 +229,22 @@ export default async function ClaimFirstSessionPage({
           actual_exit_velocity,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean) as any[];
+
+    const rowsToInsert = dedupeExerciseRows(rawRows);
 
     if (rowsToInsert.length > 0) {
-      const { error: exerciseLogsError } = await supabase
-        .from('exercise_logs')
-        .insert(rowsToInsert);
-
-      if (exerciseLogsError) {
-        console.error(
-          'CLAIM FIRST SESSION exercise logs insert error',
-          exerciseLogsError
-        );
-      }
+      await supabase.from('exercise_logs').upsert(rowsToInsert, {
+        onConflict: 'workout_log_id,workout_exercise_id',
+      });
     }
   }
 
-  cookieStore.delete(PENDING_SESSION_COOKIE);
+  // ✅ CORRECT COOKIE CLEAR (via route handler)
+  await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/clear-pending-session`, {
+    method: 'POST',
+    cache: 'no-store',
+  });
+
   redirect('/dashboard');
 }

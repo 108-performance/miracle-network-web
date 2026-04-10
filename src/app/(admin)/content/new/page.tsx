@@ -41,6 +41,10 @@ export default async function NewContentPage() {
           Session Intro = shown before a workout begins.
         </p>
         <p className="mt-1">
+          Quick Action Intro = shown after dashboard tile tap and before entering
+          the selected system.
+        </p>
+        <p className="mt-1">
           For workout-level Athlete Intel, choose a workout and leave exercise blank.
         </p>
       </div>
@@ -111,7 +115,25 @@ export default async function NewContentPage() {
             <option value="skill_principle">Skill Principle</option>
           </select>
           <p className="text-xs text-zinc-500">
-            Session Intro is the current Athlete Intel location before the runner.
+            Session Intro = before workout. Quick Action Intro = before dashboard entry.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium">System Target</label>
+          <select
+            name="system_key"
+            className="w-full rounded border p-2"
+            defaultValue=""
+          >
+            <option value="">No system target</option>
+            <option value="train">Train</option>
+            <option value="compete">Compete</option>
+            <option value="workout">Workout</option>
+            <option value="improve">Improve</option>
+          </select>
+          <p className="text-xs text-zinc-500">
+            Only used when intel type = Quick Action Intro.
           </p>
         </div>
 
