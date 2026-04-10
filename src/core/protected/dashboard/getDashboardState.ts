@@ -10,6 +10,9 @@ type ChallengeWorkoutRow = {
 };
 
 type ExerciseLogRow = {
+  exercise_id?: string | null;
+  exercise_name?: string | null;
+  athlete_id?: string;
   actual_reps?: number | null;
   actual_time_seconds?: number | null;
   actual_score?: number | null;
@@ -18,12 +21,32 @@ type ExerciseLogRow = {
   created_at: string;
 };
 
+type ExerciseVariantRow = {
+  id: string;
+  movement_id: string | null;
+  name: string | null;
+};
+
+type MovementRow = {
+  id: string;
+  name: string | null;
+};
+
+type RingProgress = {
+  label: string;
+  current: number;
+  goal: number;
+  percent: number;
+};
+
 type DashboardStateInput = {
   completedLogs: CompletedLogRow[];
   challengeWorkouts: ChallengeWorkoutRow[];
   latestWorkoutTitle: string;
   latestScore: string | number | null;
   weeklyExerciseLogs: ExerciseLogRow[];
+  exerciseVariants: ExerciseVariantRow[];
+  movements: MovementRow[];
 };
 
 type DashboardHeroState = {
@@ -31,9 +54,6 @@ type DashboardHeroState = {
   subtext: string;
   ctaLabel: string;
   ctaHref: string;
-  progressCurrent: number;
-  progressGoal: number;
-  progressPercent: number;
   progressLabel: string;
   supportLabel: string;
 };
@@ -51,11 +71,19 @@ type DashboardState = {
   challengeTotalCount: number;
   latestWorkoutTitle: string;
   latestScoreLabel: string | number;
+  rings: {
+    anchored: RingProgress;
+    dynamic: RingProgress;
+    gameSkill: RingProgress;
+  };
 };
 
 const DEFAULT_CHALLENGE_TOTAL = 8;
-const WEEKLY_PROGRESS_GOAL = 1000;
 const CURRENT_TRAINING_CTA_HREF = '/dashboard/compete/108-athlete-challenge';
+
+const ANCHORED_GOAL = 300;
+const DYNAMIC_GOAL = 300;
+const GAME_SKILL_GOAL = 300;
 
 function getStartOfDay(date: Date) {
   const next = new Date(date);
@@ -147,6 +175,14 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function normalizeName(value: string | null | undefined) {
+  return (value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function getExerciseLogUnits(log: ExerciseLogRow) {
   const reps = Math.max(0, log.actual_reps ?? 0);
   const time = Math.max(0, log.actual_time_seconds ?? 0);
@@ -160,94 +196,155 @@ function hasLoggedWork(log: ExerciseLogRow) {
   return getExerciseLogUnits(log) > 0;
 }
 
-function getWeeklyProgressTotal(logs: ExerciseLogRow[]) {
-  const weekStart = getStartOfWeek(new Date());
+function buildVariantMovementLookup(
+  exerciseVariants: ExerciseVariantRow[],
+  movements: MovementRow[]
+) {
+  const movementById = new Map<string, string>();
 
-  return logs.reduce((total, log) => {
-    const logDate = getStartOfDay(new Date(log.created_at));
-    if (logDate.getTime() < weekStart.getTime()) return total;
-    if (!hasLoggedWork(log)) return total;
+  for (const movement of movements) {
+    if (!movement.id) continue;
+    movementById.set(movement.id, normalizeName(movement.name));
+  }
 
-    return total + getExerciseLogUnits(log);
-  }, 0);
+  const movementByVariantName = new Map<string, string>();
+
+  for (const variant of exerciseVariants) {
+    const variantName = normalizeName(variant.name);
+    const movementName =
+      variant.movement_id ? movementById.get(variant.movement_id) ?? '' : '';
+
+    if (!variantName || !movementName) continue;
+    movementByVariantName.set(variantName, movementName);
+  }
+
+  return movementByVariantName;
 }
 
-function getYesterdayProgressTotal(logs: ExerciseLogRow[]) {
+function classifyBucketFromSchema(
+  log: ExerciseLogRow,
+  movementByVariantName: Map<string, string>
+): 'anchored' | 'dynamic' | 'gameSkill' {
+  const exerciseName = normalizeName(log.exercise_name);
+  const movementName = movementByVariantName.get(exerciseName) ?? '';
+
+  if (movementName.includes('anchored')) return 'anchored';
+  if (movementName.includes('dynamic')) return 'dynamic';
+  if (movementName.includes('game specific')) return 'gameSkill';
+
+  return 'dynamic';
+}
+
+function getWeeklyRingTotals(
+  logs: ExerciseLogRow[],
+  exerciseVariants: ExerciseVariantRow[],
+  movements: MovementRow[]
+) {
+  const weekStart = getStartOfWeek(new Date());
+  const movementByVariantName = buildVariantMovementLookup(exerciseVariants, movements);
+
+  let anchored = 0;
+  let dynamic = 0;
+  let gameSkill = 0;
+
+  for (const log of logs) {
+    const logDate = getStartOfDay(new Date(log.created_at));
+    if (logDate.getTime() < weekStart.getTime()) continue;
+    if (!hasLoggedWork(log)) continue;
+
+    const units = getExerciseLogUnits(log);
+    const bucket = classifyBucketFromSchema(log, movementByVariantName);
+
+    if (bucket === 'anchored') anchored += units;
+    if (bucket === 'dynamic') dynamic += units;
+    if (bucket === 'gameSkill') gameSkill += units;
+  }
+
+  return { anchored, dynamic, gameSkill };
+}
+
+function getYesterdayTotals(logs: ExerciseLogRow[]) {
   const yesterday = getStartOfDay(new Date());
   yesterday.setDate(yesterday.getDate() - 1);
 
-  return logs.reduce((total, log) => {
-    const logDate = getStartOfDay(new Date(log.created_at));
-    if (logDate.getTime() !== yesterday.getTime()) return total;
-    if (!hasLoggedWork(log)) return total;
+  let total = 0;
 
-    return total + getExerciseLogUnits(log);
-  }, 0);
+  for (const log of logs) {
+    const logDate = getStartOfDay(new Date(log.created_at));
+    if (logDate.getTime() !== yesterday.getTime()) continue;
+    if (!hasLoggedWork(log)) continue;
+
+    total += getExerciseLogUnits(log);
+  }
+
+  return total;
 }
 
-function getHeroStateFromWeeklyProgress({
-  weeklyProgress,
-  yesterdayProgress,
+function buildRing(label: string, current: number, goal: number): RingProgress {
+  return {
+    label,
+    current,
+    goal,
+    percent: clamp(Math.round((current / goal) * 100), 0, 100),
+  };
+}
+
+function getHeroState({
+  anchored,
+  dynamic,
+  gameSkill,
+  yesterdayUnits,
   daysAgo,
 }: {
-  weeklyProgress: number;
-  yesterdayProgress: number;
+  anchored: RingProgress;
+  dynamic: RingProgress;
+  gameSkill: RingProgress;
+  yesterdayUnits: number;
   daysAgo: number | null;
 }): DashboardHeroState {
-  const progressPercent = clamp(
-    Math.round((weeklyProgress / WEEKLY_PROGRESS_GOAL) * 100),
-    0,
-    100
-  );
+  const totalCurrent = anchored.current + dynamic.current + gameSkill.current;
+  const totalGoal = anchored.goal + dynamic.goal + gameSkill.goal;
+  const percent = clamp(Math.round((totalCurrent / totalGoal) * 100), 0, 100);
 
   const dayOfWeek = new Date().getDay();
   const normalizedDay = dayOfWeek === 0 ? 7 : dayOfWeek;
-  const expectedByToday = Math.round((WEEKLY_PROGRESS_GOAL / 7) * normalizedDay);
+  const expectedByToday = Math.round((totalGoal / 7) * normalizedDay);
 
-  if (weeklyProgress <= 0) {
+  if (totalCurrent <= 0) {
     return {
-      headline: 'Start your week strong.',
-      subtext: 'Your weekly training goal starts with the first work you log.',
+      headline: 'Start closing your rings.',
+      subtext: 'Build anchored, dynamic, and game skill work this week.',
       ctaLabel: 'Continue Training',
       ctaHref: CURRENT_TRAINING_CTA_HREF,
-      progressCurrent: 0,
-      progressGoal: WEEKLY_PROGRESS_GOAL,
-      progressPercent: 0,
-      progressLabel: '0 / 1000 weekly units',
+      progressLabel: `0 / ${totalGoal} total weekly units`,
       supportLabel: 'No training units logged yet',
     };
   }
 
-  if (weeklyProgress >= WEEKLY_PROGRESS_GOAL) {
+  if (percent >= 100) {
     return {
-      headline: 'You hit your weekly goal.',
-      subtext: 'Great work. Keep stacking quality sessions and stay sharp.',
+      headline: 'You closed your rings.',
+      subtext: 'Great week. Keep stacking quality work across all three buckets.',
       ctaLabel: 'Continue Training',
       ctaHref: CURRENT_TRAINING_CTA_HREF,
-      progressCurrent: weeklyProgress,
-      progressGoal: WEEKLY_PROGRESS_GOAL,
-      progressPercent,
-      progressLabel: `${weeklyProgress} / ${WEEKLY_PROGRESS_GOAL} weekly units`,
+      progressLabel: `${totalCurrent} / ${totalGoal} total weekly units`,
       supportLabel:
-        yesterdayProgress > 0
-          ? `+${yesterdayProgress} units yesterday`
-          : 'Weekly goal complete',
+        yesterdayUnits > 0
+          ? `+${yesterdayUnits} units yesterday`
+          : 'Weekly rings complete',
     };
   }
 
-  if (weeklyProgress >= expectedByToday) {
+  if (totalCurrent >= expectedByToday) {
     return {
       headline: 'You’re on track this week.',
-      subtext: 'Stay consistent and keep building progress toward your goal.',
+      subtext: 'Keep building all three buckets and close your rings.',
       ctaLabel: 'Continue Training',
       ctaHref: CURRENT_TRAINING_CTA_HREF,
-      progressCurrent: weeklyProgress,
-      progressGoal: WEEKLY_PROGRESS_GOAL,
-      progressPercent,
-      progressLabel: `${weeklyProgress} / ${WEEKLY_PROGRESS_GOAL} weekly units`,
+      progressLabel: `${totalCurrent} / ${totalGoal} total weekly units`,
       supportLabel:
-        yesterdayProgress > 0
-          ? `+${yesterdayProgress} units yesterday`
+        yesterdayUnits > 0
+          ? `+${yesterdayUnits} units yesterday`
           : daysAgo === 0
             ? 'You trained today'
             : 'Keep momentum moving today',
@@ -257,32 +354,26 @@ function getHeroStateFromWeeklyProgress({
   if (daysAgo === null || daysAgo >= 3) {
     return {
       headline: 'Let’s get back on track.',
-      subtext: 'A quick session today starts rebuilding your weekly progress.',
+      subtext: 'A quick session today starts closing your rings again.',
       ctaLabel: 'Continue Training',
       ctaHref: CURRENT_TRAINING_CTA_HREF,
-      progressCurrent: weeklyProgress,
-      progressGoal: WEEKLY_PROGRESS_GOAL,
-      progressPercent,
-      progressLabel: `${weeklyProgress} / ${WEEKLY_PROGRESS_GOAL} weekly units`,
+      progressLabel: `${totalCurrent} / ${totalGoal} total weekly units`,
       supportLabel:
-        yesterdayProgress > 0
-          ? `+${yesterdayProgress} units yesterday`
+        yesterdayUnits > 0
+          ? `+${yesterdayUnits} units yesterday`
           : 'Time to log work today',
     };
   }
 
   return {
     headline: 'You’re slightly behind pace.',
-    subtext: 'A strong session today will close the gap and keep you moving.',
+    subtext: 'A strong session today will help close your rings.',
     ctaLabel: 'Continue Training',
     ctaHref: CURRENT_TRAINING_CTA_HREF,
-    progressCurrent: weeklyProgress,
-    progressGoal: WEEKLY_PROGRESS_GOAL,
-    progressPercent,
-    progressLabel: `${weeklyProgress} / ${WEEKLY_PROGRESS_GOAL} weekly units`,
+    progressLabel: `${totalCurrent} / ${totalGoal} total weekly units`,
     supportLabel:
-      yesterdayProgress > 0
-        ? `+${yesterdayProgress} units yesterday`
+      yesterdayUnits > 0
+        ? `+${yesterdayUnits} units yesterday`
         : 'A session today gets you back in rhythm',
   };
 }
@@ -293,6 +384,8 @@ export function getDashboardState({
   latestWorkoutTitle,
   latestScore,
   weeklyExerciseLogs,
+  exerciseVariants,
+  movements,
 }: DashboardStateInput): DashboardState {
   const streakCount = calculateStreak(completedLogs);
 
@@ -323,19 +416,34 @@ export function getDashboardState({
   const lastWorkoutLabel = getRelativeDayLabel(daysAgo);
   const streakBadgeLabel = getStreakBadgeLabel(streakCount, daysAgo);
 
-  const weeklyProgress = getWeeklyProgressTotal(weeklyExerciseLogs);
-  const yesterdayProgress = getYesterdayProgressTotal(weeklyExerciseLogs);
+  const ringTotals = getWeeklyRingTotals(
+    weeklyExerciseLogs,
+    exerciseVariants,
+    movements
+  );
+  const yesterdayUnits = getYesterdayTotals(weeklyExerciseLogs);
 
-  const heroState = getHeroStateFromWeeklyProgress({
-    weeklyProgress,
-    yesterdayProgress,
+  const rings = {
+    anchored: buildRing('Anchored', ringTotals.anchored, ANCHORED_GOAL),
+    dynamic: buildRing('Dynamic', ringTotals.dynamic, DYNAMIC_GOAL),
+    gameSkill: buildRing('Game / Skill', ringTotals.gameSkill, GAME_SKILL_GOAL),
+  };
+
+  const heroState = getHeroState({
+    anchored: rings.anchored,
+    dynamic: rings.dynamic,
+    gameSkill: rings.gameSkill,
+    yesterdayUnits,
     daysAgo,
   });
 
+  const totalCurrent =
+    rings.anchored.current + rings.dynamic.current + rings.gameSkill.current;
+
   const momentumTitle = getMomentumTitle(streakCount);
   const momentumLine =
-    weeklyProgress > 0
-      ? `${weeklyProgress} weekly units logged this week.`
+    totalCurrent > 0
+      ? `${totalCurrent} total weekly units logged this week.`
       : getMomentumLine(streakCount);
 
   const lastSessionReflection =
@@ -360,5 +468,6 @@ export function getDashboardState({
     challengeTotalCount,
     latestWorkoutTitle,
     latestScoreLabel: latestScore ?? 'No score yet',
+    rings,
   };
 }

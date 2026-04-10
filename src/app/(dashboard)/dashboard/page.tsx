@@ -26,12 +26,25 @@ type ChallengeWorkoutRow = {
 
 type ExerciseLogRow = {
   athlete_id?: string;
+  exercise_id?: string | null;
+  exercise_name?: string | null;
   actual_reps?: number | null;
   actual_time_seconds?: number | null;
   actual_score?: number | null;
   actual_exit_velocity?: number | null;
   completed: boolean | null;
   created_at: string;
+};
+
+type ExerciseVariantRow = {
+  id: string;
+  movement_id: string | null;
+  name: string | null;
+};
+
+type MovementRow = {
+  id: string;
+  name: string | null;
 };
 
 function InfoCard({
@@ -68,69 +81,147 @@ function InfoCard({
   );
 }
 
-function WeeklyProgressRing({
-  current,
-  goal,
-  percent,
+function TripleProgressRings({
+  anchored,
+  dynamic,
+  gameSkill,
 }: {
-  current: number;
-  goal: number;
-  percent: number;
+  anchored: { current: number; goal: number; percent: number; label: string };
+  dynamic: { current: number; goal: number; percent: number; label: string };
+  gameSkill: { current: number; goal: number; percent: number; label: string };
 }) {
-  const safePercent = Math.max(0, Math.min(percent, 100));
-  const radius = 72;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = circumference * (1 - safePercent / 100);
+  const totalCurrent = anchored.current + dynamic.current + gameSkill.current;
+  const totalGoal = anchored.goal + dynamic.goal + gameSkill.goal;
+
+  const createRing = (
+    size: number,
+    stroke: number,
+    percent: number,
+    trackOpacity: string
+  ) => {
+    const radius = (size - stroke) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const dashOffset =
+      circumference * (1 - Math.max(0, Math.min(percent, 100)) / 100);
+
+    return { radius, circumference, dashOffset, stroke, trackOpacity };
+  };
+
+  const outer = createRing(168, 16, anchored.percent, '0.12');
+  const middle = createRing(128, 14, dynamic.percent, '0.10');
+  const inner = createRing(88, 12, gameSkill.percent, '0.08');
 
   return (
-    <div className="relative ml-auto h-[220px] w-[220px] sm:h-[260px] sm:w-[260px]">
-      <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(132,204,22,0.22),_rgba(132,204,22,0.06)_35%,_rgba(0,0,0,0)_72%)] blur-[4px]" />
+    <div className="mx-auto flex w-full max-w-[330px] items-center justify-center gap-5">
+      <div className="relative h-[168px] w-[168px] shrink-0">
+        <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,_rgba(255,255,255,0.06),_rgba(0,0,0,0)_70%)] blur-[4px]" />
 
-      <svg
-        viewBox="0 0 220 220"
-        className="absolute inset-0 h-full w-full -rotate-90"
-      >
-        <circle
-          cx="110"
-          cy="110"
-          r={radius}
-          fill="none"
-          stroke="rgba(255,255,255,0.08)"
-          strokeWidth="14"
-        />
-        <circle
-          cx="110"
-          cy="110"
-          r={radius}
-          fill="none"
-          stroke="rgb(163 230 53)"
-          strokeWidth="14"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={dashOffset}
-          style={{
-            filter: 'drop-shadow(0 0 10px rgba(163,230,53,0.45))',
-            transition: 'stroke-dashoffset 500ms ease',
-          }}
-        />
-      </svg>
+        <svg viewBox="0 0 170 170" className="absolute inset-0 h-full w-full -rotate-90">
+          <circle
+            cx="85"
+            cy="85"
+            r={outer.radius}
+            fill="none"
+            stroke={`rgba(255,255,255,${outer.trackOpacity})`}
+            strokeWidth={outer.stroke}
+          />
+          <circle
+            cx="85"
+            cy="85"
+            r={outer.radius}
+            fill="none"
+            stroke="#A3E635"
+            strokeWidth={outer.stroke}
+            strokeLinecap="round"
+            strokeDasharray={outer.circumference}
+            strokeDashoffset={outer.dashOffset}
+            style={{
+              filter: 'drop-shadow(0 0 10px rgba(163,230,53,0.38))',
+              transition: 'stroke-dashoffset 500ms ease',
+            }}
+          />
+        </svg>
 
-      <div className="absolute inset-[30px] flex flex-col items-center justify-center rounded-full border border-white/10 bg-black/75 backdrop-blur-md text-center">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">
-          Weekly Goal
-        </p>
+        <svg viewBox="0 0 170 170" className="absolute inset-0 h-full w-full -rotate-90">
+          <circle
+            cx="85"
+            cy="85"
+            r={middle.radius}
+            fill="none"
+            stroke={`rgba(255,255,255,${middle.trackOpacity})`}
+            strokeWidth={middle.stroke}
+          />
+          <circle
+            cx="85"
+            cy="85"
+            r={middle.radius}
+            fill="none"
+            stroke="#3B82F6"
+            strokeWidth={middle.stroke}
+            strokeLinecap="round"
+            strokeDasharray={middle.circumference}
+            strokeDashoffset={middle.dashOffset}
+            style={{
+              filter: 'drop-shadow(0 0 8px rgba(59,130,246,0.30))',
+              transition: 'stroke-dashoffset 500ms ease',
+            }}
+          />
+        </svg>
 
-        <p className="mt-2 text-5xl font-extrabold leading-none text-white">
-          {safePercent}%
-        </p>
+        <svg viewBox="0 0 170 170" className="absolute inset-0 h-full w-full -rotate-90">
+          <circle
+            cx="85"
+            cy="85"
+            r={inner.radius}
+            fill="none"
+            stroke={`rgba(255,255,255,${inner.trackOpacity})`}
+            strokeWidth={inner.stroke}
+          />
+          <circle
+            cx="85"
+            cy="85"
+            r={inner.radius}
+            fill="none"
+            stroke="#EC4899"
+            strokeWidth={inner.stroke}
+            strokeLinecap="round"
+            strokeDasharray={inner.circumference}
+            strokeDashoffset={inner.dashOffset}
+            style={{
+              filter: 'drop-shadow(0 0 6px rgba(236,72,153,0.26))',
+              transition: 'stroke-dashoffset 500ms ease',
+            }}
+          />
+        </svg>
+      </div>
 
-        <p className="mt-2 text-sm font-medium text-zinc-300">
-          {current} / {goal}
-        </p>
+      <div className="w-full max-w-[128px] space-y-4">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500">
+            Close Rings
+          </p>
+          <p className="mt-2 text-2xl font-extrabold text-white">
+            {totalCurrent} / {totalGoal}
+          </p>
+          <p className="text-sm text-zinc-400">weekly target</p>
+        </div>
 
-        <p className="mt-1 text-[11px] font-medium uppercase tracking-[0.16em] text-zinc-500">
-          weekly units
-        </p>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-lime-400" />
+            <p className="text-sm font-semibold text-white">Anchored</p>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+            <p className="text-sm font-semibold text-white">Dynamic</p>
+          </div>
+
+          <div className="flex items-center gap-2 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-pink-500" />
+            <p className="text-sm font-semibold text-white">Game / Skill</p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -165,18 +256,18 @@ export default async function DashboardPage() {
         </div>
 
         <section className="mb-6 overflow-hidden rounded-[32px] border border-lime-400/20 bg-[radial-gradient(circle_at_top_right,_rgba(132,204,22,0.18),_rgba(0,0,0,0.96)_55%)] p-5 sm:p-7">
-          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <p className="inline-flex rounded-full bg-lime-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
                 Today’s Focus
               </p>
 
               <h2 className="mt-5 max-w-2xl text-3xl font-extrabold leading-tight text-white sm:text-5xl">
-                Start your week strong.
+                Start closing your rings.
               </h2>
 
               <p className="mt-3 max-w-2xl text-base text-zinc-300 sm:text-lg">
-                Your weekly training goal starts with the first work you log.
+                Build anchored, dynamic, and game skill work this week.
               </p>
 
               <div className="mt-6">
@@ -189,7 +280,11 @@ export default async function DashboardPage() {
               </div>
             </div>
 
-            <WeeklyProgressRing current={0} goal={1000} percent={0} />
+            <TripleProgressRings
+              anchored={{ label: 'Anchored', current: 0, goal: 300, percent: 0 }}
+              dynamic={{ label: 'Dynamic', current: 0, goal: 300, percent: 0 }}
+              gameSkill={{ label: 'Game / Skill', current: 0, goal: 300, percent: 0 }}
+            />
           </div>
         </section>
 
@@ -262,7 +357,20 @@ export default async function DashboardPage() {
     await supabase
       .from('exercise_logs')
       .select(
-        'athlete_id, actual_reps, actual_time_seconds, actual_score, actual_exit_velocity, completed, created_at'
+        `
+        athlete_id,
+        exercise_id,
+        actual_reps,
+        actual_time_seconds,
+        actual_score,
+        actual_exit_velocity,
+        completed,
+        created_at,
+        exercises:exercise_id (
+          id,
+          name
+        )
+      `
       )
       .eq('athlete_id', athleteId)
       .gte('created_at', thirtyDaysAgo.toISOString())
@@ -270,6 +378,22 @@ export default async function DashboardPage() {
 
   if (weeklyExerciseLogsError) {
     console.error('DASHBOARD weeklyExerciseLogsError', weeklyExerciseLogsError);
+  }
+
+  const { data: exerciseVariants, error: exerciseVariantsError } = await supabase
+    .from('exercise_variants')
+    .select('id, movement_id, name');
+
+  if (exerciseVariantsError) {
+    console.error('DASHBOARD exerciseVariantsError', exerciseVariantsError);
+  }
+
+  const { data: movements, error: movementsError } = await supabase
+    .from('movements')
+    .select('id, name');
+
+  if (movementsError) {
+    console.error('DASHBOARD movementsError', movementsError);
   }
 
   const { data: quickIntros, error: quickIntrosError } = await supabase
@@ -285,10 +409,27 @@ export default async function DashboardPage() {
 
   const normalizedCompletedLogs = (completedLogs ?? []) as CompletedLogRow[];
   const challengeWorkoutRows = (challengeWorkouts ?? []) as ChallengeWorkoutRow[];
-  const weeklyExerciseLogRows = (weeklyExerciseLogs ?? []) as ExerciseLogRow[];
+  const exerciseVariantRows = (exerciseVariants ?? []) as ExerciseVariantRow[];
+  const movementRows = (movements ?? []) as MovementRow[];
+
+  const weeklyExerciseLogRows: ExerciseLogRow[] = (weeklyExerciseLogs ?? []).map((row: any) => ({
+    athlete_id: row.athlete_id,
+    exercise_id: row.exercise_id,
+    exercise_name: Array.isArray(row.exercises)
+      ? row.exercises[0]?.name ?? null
+      : row.exercises?.name ?? null,
+    actual_reps: row.actual_reps,
+    actual_time_seconds: row.actual_time_seconds,
+    actual_score: row.actual_score,
+    actual_exit_velocity: row.actual_exit_velocity,
+    completed: row.completed,
+    created_at: row.created_at,
+  }));
 
   console.log('DASHBOARD athleteId', athleteId);
   console.log('DASHBOARD weeklyExerciseLogRows', weeklyExerciseLogRows);
+  console.log('DASHBOARD exerciseVariantRows', exerciseVariantRows);
+  console.log('DASHBOARD movementRows', movementRows);
 
   let latestWorkoutTitle = '108 Athlete Challenge Session';
 
@@ -331,9 +472,12 @@ export default async function DashboardPage() {
     latestWorkoutTitle,
     latestScore: latestScore?.score ?? null,
     weeklyExerciseLogs: weeklyExerciseLogRows,
+    exerciseVariants: exerciseVariantRows,
+    movements: movementRows,
   });
 
   console.log('DASHBOARD heroState', dashboardState.heroState);
+  console.log('DASHBOARD rings', dashboardState.rings);
 
   const {
     daysAgo,
@@ -345,6 +489,7 @@ export default async function DashboardPage() {
     momentumLine,
     lastSessionReflection,
     latestScoreLabel,
+    rings,
   } = dashboardState;
 
   return (
@@ -369,7 +514,8 @@ export default async function DashboardPage() {
 
       <section className="relative mb-6 overflow-hidden rounded-[32px] border border-lime-400/20 bg-[radial-gradient(circle_at_top_right,_rgba(132,204,22,0.20),_rgba(0,0,0,0.96)_54%)] p-5 sm:p-7">
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,transparent_40%,rgba(132,204,22,0.05)_70%,transparent_100%)]" />
-        <div className="relative grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_280px]">
+
+        <div className="relative grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div>
             <p className="inline-flex rounded-full bg-lime-400/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-lime-400">
               Today’s Focus
@@ -384,9 +530,7 @@ export default async function DashboardPage() {
             </p>
 
             <div className="mt-5 space-y-2">
-              <p className="text-sm font-medium text-white">
-                {heroState.progressLabel}
-              </p>
+              <p className="text-sm font-medium text-white">{heroState.progressLabel}</p>
               <p className="text-sm text-zinc-400">{heroState.supportLabel}</p>
             </div>
 
@@ -407,10 +551,10 @@ export default async function DashboardPage() {
             </div>
           </div>
 
-          <WeeklyProgressRing
-            current={heroState.progressCurrent}
-            goal={heroState.progressGoal}
-            percent={heroState.progressPercent}
+          <TripleProgressRings
+            anchored={rings.anchored}
+            dynamic={rings.dynamic}
+            gameSkill={rings.gameSkill}
           />
         </div>
       </section>
@@ -422,14 +566,31 @@ export default async function DashboardPage() {
           body={momentumLine}
           accent="purple"
           footer={
-            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-4">
-              <p className="text-4xl font-bold text-white">
-                {streakCount}
-                <span className="ml-2 text-lg text-zinc-400">day</span>
-              </p>
-              <p className="mt-1 text-xs uppercase tracking-[0.14em] text-zinc-500">
-                Day Streak
-              </p>
+            <div className="grid grid-cols-3 gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                  Anchored
+                </p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {rings.anchored.percent}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                  Dynamic
+                </p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {rings.dynamic.percent}%
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                  Game
+                </p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {rings.gameSkill.percent}%
+                </p>
+              </div>
             </div>
           }
         />
@@ -470,9 +631,7 @@ export default async function DashboardPage() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">
             Quick Actions
           </p>
-          <p className="mt-1 text-sm text-zinc-500">
-            Jump into what matters most.
-          </p>
+          <p className="mt-1 text-sm text-zinc-500">Jump into what matters most.</p>
         </div>
 
         <QuickActionsClient intros={quickIntros || []} />
