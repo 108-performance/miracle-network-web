@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { saveWorkoutSessionAction } from '@/app/(dashboard)/dashboard/workout/[elementSlug]/[levelSlug]/actions';
+import { buildRecommendationState } from '@/core/protected/recommendation/buildRecommendationState';
+import type { RecommendationInput } from '@/core/protected/recommendation/types';
 
 type ExerciseContent = {
   title: string;
@@ -63,7 +65,6 @@ const EMPTY_LOG: LogState = {
 };
 
 const PENDING_SESSION_COOKIE = 'mn_pending_session';
-const WORKOUT_HISTORY_STORAGE_KEY = 'mn_workout_history_v1';
 
 function extractVimeoVideoId(url: string): string | null {
   const match = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
@@ -195,12 +196,14 @@ export default function WorkoutRunner({
   exercises,
   isGuest,
   autoStart = false,
+  recommendationSeed,
 }: {
   workoutId: string;
   title: string;
   exercises: Exercise[];
   isGuest: boolean;
   autoStart?: boolean;
+  recommendationSeed: RecommendationInput;
 }) {
   const [started, setStarted] = useState(autoStart);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -327,107 +330,21 @@ export default function WorkoutRunner({
     return snapshot.reps ?? null;
   }
 
-  function formatDateKey(date: Date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-  }
-
-  function getStartOfWeek(date: Date) {
-    const start = new Date(date);
-    const day = start.getDay();
-    const diff = day === 0 ? -6 : 1 - day;
-    start.setDate(start.getDate() + diff);
-    start.setHours(0, 0, 0, 0);
-    return start;
-  }
-
-  function getStreakData() {
-    try {
-      const raw = window.localStorage.getItem(WORKOUT_HISTORY_STORAGE_KEY);
-      const history: string[] = raw ? JSON.parse(raw) : [];
-
-      const today = new Date();
-      const todayKey = formatDateKey(today);
-
-      const merged = Array.from(new Set([...history, todayKey])).sort();
-
-      window.localStorage.setItem(
-        WORKOUT_HISTORY_STORAGE_KEY,
-        JSON.stringify(merged)
-      );
-
-      const uniqueDaysDescending = [...merged].sort((a, b) => b.localeCompare(a));
-
-      let streak = 0;
-      const cursor = new Date(today);
-      cursor.setHours(0, 0, 0, 0);
-
-      for (const dayKey of uniqueDaysDescending) {
-        const expectedKey = formatDateKey(cursor);
-
-        if (dayKey === expectedKey) {
-          streak += 1;
-          cursor.setDate(cursor.getDate() - 1);
-        } else if (dayKey > expectedKey) {
-          continue;
-        } else {
-          break;
-        }
-      }
-
-      const startOfWeek = getStartOfWeek(today);
-      const weekSessions = merged.filter((dayKey) => {
-        const date = new Date(`${dayKey}T00:00:00`);
-        return date >= startOfWeek;
-      }).length;
-
-      return {
-        streak,
-        weekSessions,
-      };
-    } catch {
-      return {
-        streak: 1,
-        weekSessions: 1,
-      };
-    }
-  }
-
-  function getNextStepMeta(source: 'challenge' | 'workout', titleText: string) {
-    if (source === 'challenge') {
-      const dayMatch = titleText.match(/day\s*(\d+)/i);
-      const currentDay = dayMatch ? Number(dayMatch[1]) : null;
-      const nextDay = currentDay != null ? currentDay + 1 : null;
-
-      return {
-        nextPath: '/dashboard/compete/108-athlete-challenge',
-        nextLabel: nextDay ? `Next up: Day ${nextDay}` : 'Continue Challenge',
-        nextSubtext: nextDay
-          ? `Keep the streak alive and move into Day ${nextDay}.`
-          : 'Your next challenge session is ready.',
-        primaryLabel: 'Continue Challenge',
-      };
-    }
-
-    return {
-      nextPath: '/dashboard',
-      nextLabel: 'Next up: Return to Dashboard',
-      nextSubtext: 'Choose your next workout and keep momentum going.',
-      primaryLabel: 'Back to Dashboard',
-    };
-  }
-
   function buildCompletionRedirectUrl() {
-    const normalizedTitle = title.toLowerCase();
-    const isChallengeSession = normalizedTitle.includes('challenge');
-    const source: 'challenge' | 'workout' = isChallengeSession
-      ? 'challenge'
-      : 'workout';
+    const completedLogsAfterSession = [
+      ...recommendationSeed.completedLogs,
+      {
+        completed_at: new Date().toISOString(),
+        workout_id: workoutId,
+      },
+    ];
 
-    const { streak, weekSessions } = getStreakData();
-    const nextStep = getNextStepMeta(source, title);
+    const recommendation = buildRecommendationState({
+      ...recommendationSeed,
+      completedLogs: completedLogsAfterSession,
+      currentWorkoutId: workoutId,
+      currentWorkoutTitle: title,
+    });
 
     const candidates = exercises
       .map((exercise) => {
@@ -494,17 +411,20 @@ export default function WorkoutRunner({
 
     const params = new URLSearchParams({
       title: title ?? 'Workout Session',
-      source,
+      source:
+        recommendation.nextBestSession.nextSession.pathType === 'challenge'
+          ? 'challenge'
+          : 'workout',
       today: anchor?.currentValue != null ? String(anchor.currentValue) : '',
       best: anchor?.bestValue != null ? String(anchor.bestValue) : '',
       last: anchor?.lastValue != null ? String(anchor.lastValue) : '',
       change: anchor?.changeValue != null ? String(anchor.changeValue) : '',
-      streak: String(streak),
-      week: String(weekSessions),
-      next: nextStep.nextPath,
-      nextLabel: nextStep.nextLabel,
-      nextSubtext: nextStep.nextSubtext,
-      primaryLabel: nextStep.primaryLabel,
+      streak: String(recommendation.continuation.streakCount),
+      week: String(recommendation.continuation.sessionsThisWeek),
+      next: recommendation.nextBestSession.primaryCta.href,
+      nextLabel: recommendation.nextBestSession.nextSession.title,
+      nextSubtext: recommendation.messaging.subtext,
+      primaryLabel: recommendation.nextBestSession.primaryCta.label,
     });
 
     return `/dashboard/session-complete?${params.toString()}`;
