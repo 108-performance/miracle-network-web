@@ -8,6 +8,13 @@ type ExerciseContent = {
   url: string | null;
 };
 
+type SessionSupportContent = {
+  title: string;
+  body?: string | null;
+  url: string | null;
+  reasonLabel?: string | null;
+};
+
 type MetricSnapshot = {
   reps?: number | null;
   timeSeconds?: number | null;
@@ -188,18 +195,69 @@ function InlineVideoPlayer({
   );
 }
 
+function SessionSupportCard({
+  supportContent,
+}: {
+  supportContent: SessionSupportContent;
+}) {
+  if (!supportContent.url) return null;
+
+  return (
+    <section className="mb-8 rounded-3xl border border-white/10 bg-zinc-950/90 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+        {supportContent.reasonLabel || 'Support for this session'}
+      </p>
+
+      <h2 className="mt-3 text-xl font-bold text-white">
+        {supportContent.title}
+      </h2>
+
+      {supportContent.body ? (
+        <p className="mt-2 text-sm leading-6 text-zinc-400">
+          {supportContent.body}
+        </p>
+      ) : null}
+
+      <div className="mt-4">
+        <LinkButton href={supportContent.url}>Open Support</LinkButton>
+      </div>
+    </section>
+  );
+}
+
+function LinkButton({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
+      target="_blank"
+      rel="noreferrer"
+    >
+      {children}
+    </a>
+  );
+}
+
 export default function WorkoutRunner({
   workoutId,
   title,
   exercises,
   isGuest,
   autoStart = false,
+  sessionSupportContent = null,
 }: {
   workoutId: string;
   title: string;
   exercises: Exercise[];
   isGuest: boolean;
   autoStart?: boolean;
+  sessionSupportContent?: SessionSupportContent | null;
 }) {
   const [started, setStarted] = useState(autoStart);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -492,6 +550,10 @@ export default function WorkoutRunner({
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4">
+      {currentIndex === 0 && sessionSupportContent?.url ? (
+        <SessionSupportCard supportContent={sessionSupportContent} />
+      ) : null}
+
       <div className="mb-6 text-center">
         <h1 className="text-3xl font-bold leading-tight sm:text-5xl">
           {current.name}

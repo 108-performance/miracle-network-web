@@ -74,6 +74,8 @@ type ContentPost = {
   sort_order: number | null;
   thumbnail_url: string | null;
   created_at: string | null;
+  intel_type?: string | null;
+  system_key?: string | null;
 };
 
 function normalizeMetricType(metricType?: string | null) {
@@ -217,6 +219,74 @@ function getExerciseRecord(
   return Array.isArray(exercise) ? exercise[0] ?? null : exercise;
 }
 
+function buildSessionSupportContent(
+  contentPosts: ContentPost[],
+  workoutId: string,
+  trainingProgramId: string | null
+) {
+  const candidates = contentPosts.filter((content) => {
+    const href = content.external_url || content.file_url;
+    if (!href) return false;
+    if (content.exercise_id) return false;
+    if (content.intel_type === 'quick_action_intro') return false;
+    return true;
+  });
+
+  const workoutMatch =
+    candidates.find((content) => content.workout_id === workoutId) ?? null;
+
+  if (workoutMatch) {
+    return {
+      title: workoutMatch.title ?? 'Support content',
+      body:
+        workoutMatch.short_text ??
+        workoutMatch.description ??
+        'Open this to support your session.',
+      url: workoutMatch.external_url || workoutMatch.file_url,
+      reasonLabel: 'Support for this session',
+    };
+  }
+
+  const programMatch =
+    candidates.find(
+      (content) =>
+        trainingProgramId && content.training_program_id === trainingProgramId
+    ) ?? null;
+
+  if (programMatch) {
+    return {
+      title: programMatch.title ?? 'Support content',
+      body:
+        programMatch.short_text ??
+        programMatch.description ??
+        'Open this to support your session.',
+      url: programMatch.external_url || programMatch.file_url,
+      reasonLabel: 'Built for your training path',
+    };
+  }
+
+  const keyedMatch =
+    candidates.find((content) =>
+      ['pre_session', 'methodology', 'execution', 'focus'].includes(
+        content.system_key ?? ''
+      )
+    ) ?? null;
+
+  if (keyedMatch) {
+    return {
+      title: keyedMatch.title ?? 'Support content',
+      body:
+        keyedMatch.short_text ??
+        keyedMatch.description ??
+        'Open this to support your session.',
+      url: keyedMatch.external_url || keyedMatch.file_url,
+      reasonLabel: 'Support for this session',
+    };
+  }
+
+  return null;
+}
+
 export default async function RunWorkoutPage({
   params,
 }: {
@@ -309,7 +379,7 @@ export default async function RunWorkoutPage({
   const { data: contentPostsData } = await supabase
     .from('content_posts')
     .select(
-      'id, title, description, content_type, status, audience, training_program_id, workout_id, exercise_id, external_url, file_url, short_text, is_primary, sort_order, thumbnail_url, created_at'
+      'id, title, description, content_type, status, audience, training_program_id, workout_id, exercise_id, external_url, file_url, short_text, is_primary, sort_order, thumbnail_url, created_at, intel_type, system_key'
     )
     .eq('status', 'published')
     .in('audience', ['athletes', 'both'])
@@ -340,6 +410,12 @@ export default async function RunWorkoutPage({
       acc[exerciseId] = contentForExercise;
       return acc;
     }, {});
+
+  const sessionSupportContent = buildSessionSupportContent(
+    contentPosts,
+    workout.id,
+    workout.training_program_id ?? null
+  );
 
   let progressionByExerciseId: Record<string, ExerciseProgression> = {};
 
@@ -410,6 +486,7 @@ export default async function RunWorkoutPage({
           exercises={exercises}
           isGuest={isGuest}
           autoStart={true}
+          sessionSupportContent={sessionSupportContent}
         />
       </div>
     </main>

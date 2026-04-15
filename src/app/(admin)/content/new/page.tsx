@@ -1,6 +1,57 @@
 import { createClient } from '@/lib/supabase/server';
 import { createContentPost } from '../actions';
 
+const INTEL_TYPE_OPTIONS = [
+  { value: '', label: 'No intel type' },
+  { value: 'quick_action_intro', label: 'Quick Action Intro' },
+  { value: 'session_support', label: 'Session Support' },
+  { value: 'post_session_support', label: 'Post-Session Support' },
+  { value: 'methodology_support', label: 'Methodology Support' },
+  { value: 'exercise_demo', label: 'Exercise Demo' },
+  { value: 'session_intro', label: 'Session Intro (legacy)' },
+  { value: 'movement_principle', label: 'Movement Principle (legacy)' },
+  { value: 'skill_principle', label: 'Skill Principle (legacy)' },
+];
+
+const SYSTEM_KEY_OPTIONS = [
+  { value: '', label: 'No system key' },
+  { value: 'train', label: 'train (quick action only)' },
+  { value: 'compete', label: 'compete (quick action only)' },
+  { value: 'workout', label: 'workout (quick action only)' },
+  { value: 'improve', label: 'improve (quick action only)' },
+  { value: 'challenge_start', label: 'challenge_start' },
+  { value: 'challenge_continue', label: 'challenge_continue' },
+  { value: 'resume_training', label: 'resume_training' },
+  { value: 'pre_session', label: 'pre_session' },
+  { value: 'execution', label: 'execution' },
+  { value: 'focus', label: 'focus' },
+  { value: 'post_session', label: 'post_session' },
+  { value: 'recovery', label: 'recovery' },
+  { value: 'reflection', label: 'reflection' },
+  { value: 'reset', label: 'reset' },
+  { value: 'restart', label: 'restart' },
+  { value: 'mindset', label: 'mindset' },
+  { value: 'methodology', label: 'methodology' },
+  { value: 'habit_loop', label: 'habit_loop' },
+  { value: 'onboarding', label: 'onboarding' },
+  { value: 'methodology_intro', label: 'methodology_intro' },
+];
+
+function GuidanceCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
+      <p className="font-medium text-zinc-900">{title}</p>
+      <div className="mt-2 space-y-1">{children}</div>
+    </div>
+  );
+}
+
 export default async function NewContentPage() {
   const supabase = await createClient();
 
@@ -32,21 +83,33 @@ export default async function NewContentPage() {
   }
 
   return (
-    <div className="max-w-2xl p-6">
+    <div className="max-w-3xl p-6">
       <h1 className="mb-2 text-2xl font-bold">Upload Content</h1>
 
-      <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-700">
-        <p className="font-medium text-zinc-900">Athlete Intel rule</p>
-        <p className="mt-1">
-          Session Intro = shown before a workout begins.
-        </p>
-        <p className="mt-1">
-          Quick Action Intro = shown after dashboard tile tap and before entering
-          the selected system.
-        </p>
-        <p className="mt-1">
-          For workout-level Athlete Intel, choose a workout and leave exercise blank.
-        </p>
+      <div className="mb-6 grid gap-4">
+        <GuidanceCard title="Content tagging rule">
+          <p>Use the narrowest correct scope.</p>
+          <p>Exercise-only content → choose exercise.</p>
+          <p>Session/workout support → choose workout.</p>
+          <p>Program-wide support → choose training program.</p>
+          <p>General behavior moment → use system key.</p>
+        </GuidanceCard>
+
+        <GuidanceCard title="Recommended intel types">
+          <p>Quick Action Intro → shown after dashboard tile tap.</p>
+          <p>Session Support → shown before or during a session.</p>
+          <p>Post-Session Support → shown after a completed session.</p>
+          <p>Methodology Support → reinforces the 108 lens.</p>
+          <p>Exercise Demo → specific drill/demo content only.</p>
+        </GuidanceCard>
+
+        <GuidanceCard title="Recommended system keys">
+          <p>Before session → pre_session, execution, focus.</p>
+          <p>After session → post_session, recovery, reflection.</p>
+          <p>Habit/behavior → mindset, reset, restart, habit_loop.</p>
+          <p>Methodology → methodology, methodology_intro.</p>
+          <p>Challenge flow → challenge_start, challenge_continue.</p>
+        </GuidanceCard>
       </div>
 
       <form action={createContentPost} className="space-y-4">
@@ -66,7 +129,7 @@ export default async function NewContentPage() {
 
         <textarea
           name="short_text"
-          placeholder="Short text (optional)"
+          placeholder="Short text shown in recommendation cards (recommended)"
           className="w-full rounded border p-2"
           rows={3}
         />
@@ -108,32 +171,32 @@ export default async function NewContentPage() {
             className="w-full rounded border p-2"
             defaultValue=""
           >
-            <option value="">No intel type</option>
-            <option value="session_intro">Session Intro</option>
-            <option value="quick_action_intro">Quick Action Intro</option>
-            <option value="movement_principle">Movement Principle</option>
-            <option value="skill_principle">Skill Principle</option>
+            {INTEL_TYPE_OPTIONS.map((option) => (
+              <option key={option.value || 'blank'} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <p className="text-xs text-zinc-500">
-            Session Intro = before workout. Quick Action Intro = before dashboard entry.
+            Choose the delivery lane for this content.
           </p>
         </div>
 
         <div className="space-y-2">
-          <label className="block text-sm font-medium">System Target</label>
+          <label className="block text-sm font-medium">System Key</label>
           <select
             name="system_key"
             className="w-full rounded border p-2"
             defaultValue=""
           >
-            <option value="">No system target</option>
-            <option value="train">Train</option>
-            <option value="compete">Compete</option>
-            <option value="workout">Workout</option>
-            <option value="improve">Improve</option>
+            {SYSTEM_KEY_OPTIONS.map((option) => (
+              <option key={option.value || 'blank'} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
           <p className="text-xs text-zinc-500">
-            Only used when intel type = Quick Action Intro.
+            Use this for the behavior moment you want the content to support.
           </p>
         </div>
 
@@ -151,6 +214,9 @@ export default async function NewContentPage() {
               </option>
             ))}
           </select>
+          <p className="text-xs text-zinc-500">
+            Use this when content applies to the full training path.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -169,7 +235,7 @@ export default async function NewContentPage() {
             ))}
           </select>
           <p className="text-xs text-zinc-500">
-            Choose a workout for workout-level Athlete Intel.
+            Use this for session-level support or post-session support.
           </p>
         </div>
 
@@ -188,7 +254,7 @@ export default async function NewContentPage() {
             ))}
           </select>
           <p className="text-xs text-zinc-500">
-            Leave blank for workout-level Athlete Intel.
+            Only use exercise when this content is a drill/demo for one movement.
           </p>
         </div>
 
@@ -207,7 +273,7 @@ export default async function NewContentPage() {
             className="h-4 w-4"
           />
           <label htmlFor="is_primary" className="text-sm">
-            Mark as primary content
+            Mark as primary content for this scope
           </label>
         </div>
 
@@ -219,6 +285,9 @@ export default async function NewContentPage() {
             accept="image/*,.pdf"
             className="w-full rounded border p-2"
           />
+          <p className="text-xs text-zinc-500">
+            File uploads can now support recommendation surfaces too.
+          </p>
         </div>
 
         <button
