@@ -63,7 +63,6 @@ export default function WorkoutSessionPage({
 }) {
   const [started, setStarted] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [completed, setCompleted] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isPending, startTransition] = useTransition();
@@ -99,7 +98,11 @@ export default function WorkoutSessionPage({
       parts.push(`${current.prescribedSets} set${current.prescribedSets === 1 ? '' : 's'}`);
     }
 
-    if (current.metricType === 'reps' || current.metricType === 'mixed') {
+    if (
+      current.metricType === 'reps' ||
+      current.metricType === 'mixed' ||
+      !current.metricType
+    ) {
       if (current.prescribedReps) {
         parts.push(`${current.prescribedReps} rep${current.prescribedReps === 1 ? '' : 's'}`);
       }
@@ -162,7 +165,9 @@ export default function WorkoutSessionPage({
         <MetricInputCard
           label="Time (seconds)"
           value={currentLog.timeSeconds}
-          onChange={(value) => updateLog(current.exerciseId, 'timeSeconds', value)}
+          onChange={(value) =>
+            updateLog(current.exerciseId, 'timeSeconds', value)
+          }
           placeholder="Enter time in seconds"
         />
       );
@@ -184,7 +189,9 @@ export default function WorkoutSessionPage({
         <MetricInputCard
           label="Exit Velocity"
           value={currentLog.exitVelocity}
-          onChange={(value) => updateLog(current.exerciseId, 'exitVelocity', value)}
+          onChange={(value) =>
+            updateLog(current.exerciseId, 'exitVelocity', value)
+          }
           placeholder="Enter exit velocity"
         />
       );
@@ -202,7 +209,9 @@ export default function WorkoutSessionPage({
           <MetricInputCard
             label="Time (seconds)"
             value={currentLog.timeSeconds}
-            onChange={(value) => updateLog(current.exerciseId, 'timeSeconds', value)}
+            onChange={(value) =>
+              updateLog(current.exerciseId, 'timeSeconds', value)
+            }
             placeholder="Enter time"
           />
           <MetricInputCard
@@ -214,7 +223,9 @@ export default function WorkoutSessionPage({
           <MetricInputCard
             label="Exit Velocity"
             value={currentLog.exitVelocity}
-            onChange={(value) => updateLog(current.exerciseId, 'exitVelocity', value)}
+            onChange={(value) =>
+              updateLog(current.exerciseId, 'exitVelocity', value)
+            }
             placeholder="Enter exit velocity"
           />
         </div>
@@ -277,9 +288,18 @@ export default function WorkoutSessionPage({
         </p>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <FeedbackStat label={`Last ${label}`} value={formatMetricValue(lastValue, metricType)} />
-          <FeedbackStat label={`Best ${label}`} value={formatMetricValue(bestValue, metricType)} />
-          <FeedbackStat label={`Current ${label}`} value={formatMetricValue(currentValue, metricType)} />
+          <FeedbackStat
+            label={`Last ${label}`}
+            value={formatMetricValue(lastValue, metricType)}
+          />
+          <FeedbackStat
+            label={`Best ${label}`}
+            value={formatMetricValue(bestValue, metricType)}
+          />
+          <FeedbackStat
+            label={`Current ${label}`}
+            value={formatMetricValue(currentValue, metricType)}
+          />
         </div>
 
         {(vsLast != null || vsBest != null) && (
@@ -334,8 +354,10 @@ export default function WorkoutSessionPage({
             result.savedExerciseLogs === 1 ? '' : 's'
           } recorded.`
         );
-        setCompleted(true);
-        setStarted(false);
+
+        if (typeof window !== 'undefined') {
+          window.location.href = result.redirectUrl;
+        }
       } catch (error) {
         console.error(error);
         setErrorMessage(
@@ -345,53 +367,6 @@ export default function WorkoutSessionPage({
         );
       }
     });
-  }
-
-  if (completed) {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center bg-black px-6 py-12 text-white">
-        <div className="mx-auto w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-8 text-center">
-          <p className="mb-2 text-sm uppercase tracking-[0.2em] text-zinc-500">
-            Session Complete
-          </p>
-
-          <h1 className="mb-4 text-4xl font-bold">{title}</h1>
-
-          <p className="mb-4 text-zinc-300">
-            Nice work. You completed all {exercises.length} exercises in this
-            session.
-          </p>
-
-          {saveMessage ? (
-            <p className="mb-8 text-sm text-lime-400">{saveMessage}</p>
-          ) : null}
-
-          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <button
-              onClick={() => {
-                setCompleted(false);
-                setStarted(true);
-                setCurrentIndex(0);
-              }}
-              className="rounded-full bg-white px-6 py-3 font-semibold text-black"
-            >
-              Restart Session
-            </button>
-
-            <button
-              onClick={() => {
-                setCompleted(false);
-                setStarted(false);
-                setCurrentIndex(0);
-              }}
-              className="rounded-full border border-zinc-700 px-6 py-3 font-semibold text-white"
-            >
-              Back to Start
-            </button>
-          </div>
-        </div>
-      </main>
-    );
   }
 
   if (!started) {
@@ -414,7 +389,6 @@ export default function WorkoutSessionPage({
 
           <button
             onClick={() => {
-              setCompleted(false);
               setStarted(true);
               setCurrentIndex(0);
             }}
@@ -529,6 +503,10 @@ export default function WorkoutSessionPage({
 
           {errorMessage ? (
             <p className="mt-6 text-sm text-red-400">{errorMessage}</p>
+          ) : null}
+
+          {saveMessage ? (
+            <p className="mt-6 text-sm text-lime-400">{saveMessage}</p>
           ) : null}
 
           <div className="mt-10 flex justify-between gap-3">
