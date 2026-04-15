@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 type SearchParams = {
   title?: string;
-  source?: string;
   today?: string;
   best?: string;
   last?: string;
@@ -134,14 +133,13 @@ export default async function SessionCompletePage({
   const week = params.week;
 
   const headline = params.headline || 'Session complete.';
-  const supportLabel = params.supportLabel || 'Keep building.';
-  const nextUpHeadline = params.nextLabel || 'Choose your next session.';
-  const nextUpSubtext =
-    params.nextSubtext || 'Keep your momentum moving.';
-  const primaryLabel = params.primaryLabel || 'Back to Dashboard';
+  const supportLabel = params.supportLabel || '';
+  const nextUpHeadline = params.nextLabel || '';
+  const nextUpSubtext = params.nextSubtext || '';
+  const primaryLabel = params.primaryLabel || 'Continue';
   const primaryHref = params.next || '/dashboard';
-  const secondaryLabel = params.secondaryLabel || 'Browse Workouts';
-  const secondaryHref = params.secondaryHref || '/dashboard/workout';
+  const secondaryLabel = params.secondaryLabel || '';
+  const secondaryHref = params.secondaryHref || '';
 
   const progressMessage = getProgressMessage(change, today, last, best);
   const momentumHeadline = getMomentumHeadline(streak, week);
@@ -167,9 +165,11 @@ export default async function SessionCompletePage({
             {title}
           </p>
 
-          <p className="mt-2 text-sm text-white/55">
-            {supportLabel}
-          </p>
+          {supportLabel ? (
+            <p className="mt-2 text-sm text-white/55">
+              {supportLabel}
+            </p>
+          ) : null}
         </div>
 
         <section className="mb-4 grid grid-cols-3 gap-3">
@@ -210,17 +210,23 @@ export default async function SessionCompletePage({
           </p>
         </section>
 
-        <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-          <p className="text-xs uppercase tracking-wide text-white/45">
-            Next Up
-          </p>
-          <p className="mt-2 text-base text-white/85">
-            {nextUpHeadline}
-          </p>
-          <p className="mt-1 text-sm text-white/60">
-            {nextUpSubtext}
-          </p>
-        </section>
+        {(nextUpHeadline || nextUpSubtext) ? (
+          <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <p className="text-xs uppercase tracking-wide text-white/45">
+              Next Up
+            </p>
+            {nextUpHeadline ? (
+              <p className="mt-2 text-base text-white/85">
+                {nextUpHeadline}
+              </p>
+            ) : null}
+            {nextUpSubtext ? (
+              <p className="mt-1 text-sm text-white/60">
+                {nextUpSubtext}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         <div className="mt-auto flex flex-col gap-3">
           <Link
@@ -230,12 +236,14 @@ export default async function SessionCompletePage({
             {primaryLabel}
           </Link>
 
-          <Link
-            href={secondaryHref}
-            className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 text-base font-medium text-white transition hover:bg-white/10"
-          >
-            {secondaryLabel}
-          </Link>
+          {secondaryLabel && secondaryHref ? (
+            <Link
+              href={secondaryHref}
+              className="flex h-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-5 text-base font-medium text-white transition hover:bg-white/10"
+            >
+              {secondaryLabel}
+            </Link>
+          ) : null}
         </div>
       </div>
     </main>
