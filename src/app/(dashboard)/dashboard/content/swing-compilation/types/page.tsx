@@ -12,7 +12,7 @@ type ContentPost = {
   file_url: string | null;
 };
 
-const SYSTEM_KEY = 'discover:swing-compilation:setups';
+const SYSTEM_KEY = 'discover:swing-compilation:types';
 
 function ContentCard({ item }: { item: ContentPost }) {
   const href = item.external_url || item.file_url || '#';
@@ -32,7 +32,7 @@ function ContentCard({ item }: { item: ContentPost }) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-zinc-500">
-            Setups
+            Types
           </div>
         )}
       </div>
@@ -50,7 +50,7 @@ function ContentCard({ item }: { item: ContentPost }) {
   );
 }
 
-export default async function SetupsPage() {
+export default async function TypesPage() {
   const supabase = await createClient();
 
   const { data } = await supabase
@@ -71,17 +71,17 @@ export default async function SetupsPage() {
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">
           Swing Compilation
         </p>
-        <h1 className="mt-3 text-4xl font-extrabold">Setups</h1>
+        <h1 className="mt-3 text-4xl font-extrabold">Types</h1>
         <p className="mt-3 max-w-2xl text-zinc-400">
-          Browse setup-focused swing examples and references.
+          Explore different swing patterns and examples.
         </p>
       </section>
 
       {items.length === 0 ? (
         <section className="rounded-[24px] border border-white/10 bg-white/[0.04] p-6">
-          <p className="text-lg font-semibold text-white">No setup content yet</p>
+          <p className="text-lg font-semibold text-white">No swing type content yet</p>
           <p className="mt-2 text-sm text-zinc-400">
-            Add discover-routed content with the Setups subcategory in admin.
+            Add discover-routed content with the Types subcategory in admin.
           </p>
         </section>
       ) : (
