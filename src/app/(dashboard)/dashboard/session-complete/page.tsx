@@ -99,14 +99,6 @@ function getMomentumSubtext(streak: number, week: number) {
   return 'Come back tomorrow and build momentum';
 }
 
-function getMetricTypeLabel(metricType?: string | null) {
-  if (metricType === 'time') return 'time';
-  if (metricType === 'score') return 'score';
-  if (metricType === 'exit_velocity') return 'exit velocity';
-  if (metricType === 'mixed') return 'score';
-  return 'reps';
-}
-
 function extractMetricValue(
   row: {
     actual_reps: number | null;
