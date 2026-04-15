@@ -63,6 +63,7 @@ export default async function DashboardLayout({
   const trainingHref = firstWorkoutId
     ? `/dashboard/training/${firstWorkoutId}`
     : '/dashboard/training';
+  const contentHref = '/dashboard/content';
   const profileHref = user ? '/dashboard/profile' : '/login';
 
   return (
@@ -134,6 +135,7 @@ export default async function DashboardLayout({
           homeHref={homeHref}
           challengeHref={challengeHref}
           trainingHref={trainingHref}
+          contentHref={contentHref}
           profileHref={profileHref}
         />
       </nav>
