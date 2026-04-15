@@ -39,20 +39,11 @@ function getProgressMessage(
     return `Up ${change} from last session`;
   }
 
-  if (
-    today !== null &&
-    best !== null &&
-    today === best &&
-    today > 0
-  ) {
+  if (today !== null && best !== null && today === best && today > 0) {
     return 'You matched your best performance';
   }
 
-  if (
-    today !== null &&
-    last !== null &&
-    today > last
-  ) {
+  if (today !== null && last !== null && today > last) {
     return 'Trending up from your last session';
   }
 
@@ -218,14 +209,16 @@ export default async function SessionCompletePage({
     currentPathType,
   });
 
-  const { data: currentSessionExerciseLogs, error: currentSessionExerciseLogsError } =
-    await supabase
-      .from('exercise_logs')
-      .select(
-        'exercise_id, actual_reps, actual_time_seconds, actual_score, actual_exit_velocity'
-      )
-      .eq('athlete_id', athlete.id)
-      .eq('workout_log_id', workoutLog.id);
+  const {
+    data: currentSessionExerciseLogs,
+    error: currentSessionExerciseLogsError,
+  } = await supabase
+    .from('exercise_logs')
+    .select(
+      'exercise_id, actual_reps, actual_time_seconds, actual_score, actual_exit_velocity'
+    )
+    .eq('athlete_id', athlete.id)
+    .eq('workout_log_id', workoutLog.id);
 
   if (currentSessionExerciseLogsError) {
     notFound();
@@ -250,12 +243,13 @@ export default async function SessionCompletePage({
     );
 
     if (anchorRow) {
-      const { data: workoutExercise, error: workoutExerciseError } = await supabase
-        .from('workout_exercises')
-        .select('exercise_id, metric_type')
-        .eq('workout_id', workout.id)
-        .eq('exercise_id', anchorRow.exercise_id)
-        .maybeSingle();
+      const { data: workoutExercise, error: workoutExerciseError } =
+        await supabase
+          .from('workout_exercises')
+          .select('exercise_id, metric_type')
+          .eq('workout_id', workout.id)
+          .eq('exercise_id', anchorRow.exercise_id)
+          .maybeSingle();
 
       if (!workoutExerciseError && workoutExercise) {
         const metricType = workoutExercise.metric_type ?? 'reps';
@@ -280,10 +274,8 @@ export default async function SessionCompletePage({
 
         const comparableValues = [
           todayValue,
-          ...previousRows
-            .map((row) => extractMetricValue(row, metricType))
-            .filter((value): value is number => value != null),
-        ];
+          ...previousRows.map((row) => extractMetricValue(row, metricType)),
+        ].filter((value): value is number => value != null);
 
         const bestValue =
           comparableValues.length > 0
@@ -357,31 +349,39 @@ export default async function SessionCompletePage({
             {headline}
           </h1>
 
-          <p className="mt-3 text-sm text-white/65">
-            {title}
-          </p>
+          <p className="mt-3 text-sm text-white/65">{title}</p>
 
           {supportLabel ? (
-            <p className="mt-2 text-sm text-white/55">
-              {supportLabel}
-            </p>
+            <p className="mt-2 text-sm text-white/55">{supportLabel}</p>
           ) : null}
         </div>
 
         <section className="mb-4 grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-white/45">Today</p>
-            <p className="mt-2 text-2xl font-semibold">{displayValue(summary.today)}</p>
+            <p className="text-xs uppercase tracking-wide text-white/45">
+              Today
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {displayValue(summary.today)}
+            </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-white/45">Best</p>
-            <p className="mt-2 text-2xl font-semibold">{displayValue(summary.best)}</p>
+            <p className="text-xs uppercase tracking-wide text-white/45">
+              Best
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {displayValue(summary.best)}
+            </p>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <p className="text-xs uppercase tracking-wide text-white/45">Last</p>
-            <p className="mt-2 text-2xl font-semibold">{displayValue(summary.last)}</p>
+            <p className="text-xs uppercase tracking-wide text-white/45">
+              Last
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {displayValue(summary.last)}
+            </p>
           </div>
         </section>
 
@@ -389,37 +389,27 @@ export default async function SessionCompletePage({
           <p className="text-xs uppercase tracking-wide text-white/45">
             Progress
           </p>
-          <p className="mt-2 text-lg font-medium">
-            {progressMessage}
-          </p>
+          <p className="mt-2 text-lg font-medium">{progressMessage}</p>
         </section>
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs uppercase tracking-wide text-white/45">
             Momentum
           </p>
-          <p className="mt-2 text-lg font-medium">
-            {momentumHeadline}
-          </p>
-          <p className="mt-1 text-sm text-white/65">
-            {momentumSubtext}
-          </p>
+          <p className="mt-2 text-lg font-medium">{momentumHeadline}</p>
+          <p className="mt-1 text-sm text-white/65">{momentumSubtext}</p>
         </section>
 
-        {(nextUpHeadline || nextUpSubtext) ? (
+        {nextUpHeadline || nextUpSubtext ? (
           <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <p className="text-xs uppercase tracking-wide text-white/45">
               Next Up
             </p>
             {nextUpHeadline ? (
-              <p className="mt-2 text-base text-white/85">
-                {nextUpHeadline}
-              </p>
+              <p className="mt-2 text-base text-white/85">{nextUpHeadline}</p>
             ) : null}
             {nextUpSubtext ? (
-              <p className="mt-1 text-sm text-white/60">
-                {nextUpSubtext}
-              </p>
+              <p className="mt-1 text-sm text-white/60">{nextUpSubtext}</p>
             ) : null}
           </section>
         ) : null}
