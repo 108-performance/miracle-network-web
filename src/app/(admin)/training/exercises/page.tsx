@@ -23,14 +23,60 @@ type ContentPostRecord = {
   id: string;
   title: string | null;
   description: string | null;
+  short_text: string | null;
+  thumbnail_url: string | null;
   content_type: string | null;
   status: string | null;
   audience: string | null;
   external_url: string | null;
   file_url: string | null;
   exercise_id: string | null;
+  system_key: string | null;
   created_at: string | null;
 };
+
+const DISCOVER_CATEGORY_OPTIONS = [
+  { value: '', label: 'No discover category' },
+  { value: 'education', label: 'Education' },
+  { value: 'swing-compilation', label: 'Swing Compilation' },
+  { value: 'athlete-specific', label: 'Athlete Specific' },
+];
+
+const DISCOVER_SUBCATEGORY_OPTIONS = [
+  { value: '', label: 'No discover subcategory' },
+  { value: 'skill', label: 'Skill' },
+  { value: 'in-game', label: 'In Game' },
+  { value: 'team', label: 'Team' },
+  { value: 'mental-skills', label: 'Mental Skills' },
+  { value: 'setups', label: 'Setups' },
+  { value: 'finishes', label: 'Finishes' },
+  { value: 'types', label: 'Types' },
+  { value: 'latest', label: 'Latest' },
+  { value: 'athletes', label: 'Athletes' },
+];
+
+function buildDiscoverSystemKey({
+  showInDiscover,
+  discoverCategory,
+  discoverSubcategory,
+}: {
+  showInDiscover: boolean;
+  discoverCategory: string;
+  discoverSubcategory: string;
+}) {
+  if (!showInDiscover) return null;
+  return `discover:${discoverCategory}:${discoverSubcategory}`;
+}
+
+function formatSystemKeyLabel(systemKey: string | null) {
+  if (!systemKey) return 'Exercise only';
+
+  if (systemKey.startsWith('discover:')) {
+    return `Watch / ${systemKey.replace(/^discover:/, '')}`;
+  }
+
+  return systemKey;
+}
 
 export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
   const { q = '' } = await searchParams;
@@ -80,11 +126,16 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
     const exerciseId = String(formData.get('exerciseId') ?? '').trim();
     const title = String(formData.get('title') ?? '').trim();
     const description = String(formData.get('description') ?? '').trim();
+    const shortText = String(formData.get('short_text') ?? '').trim();
+    const thumbnailUrl = String(formData.get('thumbnail_url') ?? '').trim();
     const contentType = String(formData.get('content_type') ?? 'video').trim() || 'video';
     const status = String(formData.get('status') ?? 'published').trim() || 'published';
     const audience = String(formData.get('audience') ?? 'athletes').trim() || 'athletes';
     const externalUrl = String(formData.get('external_url') ?? '').trim();
     const fileUrl = String(formData.get('file_url') ?? '').trim();
+    const showInDiscover = String(formData.get('show_in_discover') ?? '').trim() === 'true';
+    const discoverCategory = String(formData.get('discover_category') ?? '').trim();
+    const discoverSubcategory = String(formData.get('discover_subcategory') ?? '').trim();
 
     if (!exerciseId) {
       throw new Error('Missing exerciseId for content creation.');
@@ -97,6 +148,20 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
     if (!externalUrl && !fileUrl) {
       throw new Error('Add either an external URL or a file URL.');
     }
+
+    if (showInDiscover && !discoverCategory) {
+      throw new Error('Choose a Discover Category when Show in Discover is checked.');
+    }
+
+    if (showInDiscover && !discoverSubcategory) {
+      throw new Error('Choose a Discover Subcategory when Show in Discover is checked.');
+    }
+
+    const systemKey = buildDiscoverSystemKey({
+      showInDiscover,
+      discoverCategory,
+      discoverSubcategory,
+    });
 
     const supabase = await createClient();
 
@@ -111,6 +176,8 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
     const { error } = await supabase.from('content_posts').insert({
       title,
       description: description || null,
+      short_text: shortText || null,
+      thumbnail_url: thumbnailUrl || null,
       content_type: contentType,
       status,
       audience,
@@ -121,6 +188,7 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
       training_program_id: null,
       is_primary: true,
       sort_order: 0,
+      system_key: systemKey,
     });
 
     if (error) {
@@ -188,7 +256,7 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
     const { data: contentPosts, error: contentError } = await supabase
       .from('content_posts')
       .select(
-        'id, title, description, content_type, status, audience, external_url, file_url, exercise_id, created_at'
+        'id, title, description, short_text, thumbnail_url, content_type, status, audience, external_url, file_url, exercise_id, system_key, created_at'
       )
       .in('exercise_id', exerciseIds)
       .order('created_at', { ascending: false });
@@ -360,7 +428,31 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
                                 <textarea
                                   name="description"
                                   rows={3}
-                                  placeholder="Optional short explanation or notes"
+                                  placeholder="Optional longer explanation or notes"
+                                  className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                  Short Text
+                                </label>
+                                <input
+                                  type="text"
+                                  name="short_text"
+                                  placeholder="Short feed/card summary"
+                                  className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-500"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                                  Thumbnail URL
+                                </label>
+                                <input
+                                  type="url"
+                                  name="thumbnail_url"
+                                  placeholder="https://..."
                                   className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-neutral-500"
                                 />
                               </div>
@@ -436,6 +528,71 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
                                 />
                               </div>
 
+                              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                                <label className="flex items-start gap-3">
+                                  <input
+                                    type="checkbox"
+                                    name="show_in_discover"
+                                    value="true"
+                                    className="mt-0.5 h-4 w-4 rounded border-neutral-300"
+                                  />
+                                  <span>
+                                    <span className="block text-sm font-semibold text-emerald-900">
+                                      Show in Discover
+                                    </span>
+                                    <span className="mt-1 block text-xs leading-5 text-emerald-800">
+                                      Use this when you want this exercise content to also be
+                                      reusable in the athlete Watch/Discover surface.
+                                    </span>
+                                  </span>
+                                </label>
+
+                                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                                  <div>
+                                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-emerald-900">
+                                      Discover Category
+                                    </label>
+                                    <select
+                                      name="discover_category"
+                                      defaultValue=""
+                                      className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-emerald-400"
+                                    >
+                                      {DISCOVER_CATEGORY_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+
+                                  <div>
+                                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-emerald-900">
+                                      Discover Subcategory
+                                    </label>
+                                    <select
+                                      name="discover_subcategory"
+                                      defaultValue=""
+                                      className="w-full rounded-xl border border-emerald-200 bg-white px-4 py-3 text-sm text-neutral-900 outline-none transition focus:border-emerald-400"
+                                    >
+                                      {DISCOVER_SUBCATEGORY_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                          {option.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <p className="mt-3 text-xs leading-5 text-emerald-800">
+                                  Discover items now require a full branch path and will save as a
+                                  value like
+                                  <span className="mx-1 rounded bg-emerald-100 px-1.5 py-0.5 font-medium">
+                                    discover:education:skill
+                                  </span>
+                                  .
+                                </p>
+                              </div>
+
                               <button
                                 type="submit"
                                 className="rounded-xl bg-neutral-950 px-4 py-3 text-sm font-medium text-white transition hover:bg-neutral-800"
@@ -476,11 +633,28 @@ export default async function ExerciseLibraryPage({ searchParams }: PageProps) {
                                           <span className="rounded-full border border-neutral-200 bg-neutral-50 px-2.5 py-1 text-[11px] font-medium text-neutral-700">
                                             Audience: {item.audience || '—'}
                                           </span>
+                                          {item.system_key ? (
+                                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                                              {formatSystemKeyLabel(item.system_key)}
+                                            </span>
+                                          ) : null}
                                         </div>
 
+                                        {item.short_text?.trim() ? (
+                                          <p className="mt-3 text-sm font-medium text-neutral-800">
+                                            {item.short_text}
+                                          </p>
+                                        ) : null}
+
                                         {item.description?.trim() ? (
-                                          <p className="mt-3 text-sm leading-6 text-neutral-600">
+                                          <p className="mt-2 text-sm leading-6 text-neutral-600">
                                             {item.description}
+                                          </p>
+                                        ) : null}
+
+                                        {item.thumbnail_url ? (
+                                          <p className="mt-3 text-xs text-neutral-500">
+                                            Thumbnail attached
                                           </p>
                                         ) : null}
 
