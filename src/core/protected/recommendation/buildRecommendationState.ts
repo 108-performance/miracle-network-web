@@ -24,6 +24,29 @@ function getSupportBody(candidate: SupportContentCandidate) {
   );
 }
 
+function buildSupportResult(
+  candidate: SupportContentCandidate,
+  reasonLabel: string
+): RecommendedSupportContent {
+  return {
+    id: candidate.id,
+    title: normalizeText(candidate.title) || 'Support content',
+    body: getSupportBody(candidate),
+    href: getSupportHref(candidate),
+    contentType: candidate.content_type || 'content',
+    reasonLabel,
+  };
+}
+
+function getUniqueCandidates(candidates: SupportContentCandidate[]) {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    if (seen.has(candidate.id)) return false;
+    seen.add(candidate.id);
+    return true;
+  });
+}
+
 function buildRecommendedSupportContent(
   input: RecommendationInput,
   recommendationType: RecommendationState['nextBestSession']['recommendationType'],
@@ -31,12 +54,14 @@ function buildRecommendedSupportContent(
   nextWorkoutId: string | null,
   nextTrainingProgramId: string | null
 ): RecommendedSupportContent | null {
-  const candidates = (input.supportContentCandidates ?? []).filter((candidate) => {
-    const href = getSupportHref(candidate);
-    if (!href) return false;
-    if (candidate.intel_type === 'quick_action_intro') return false;
-    return true;
-  });
+  const candidates = getUniqueCandidates(
+    (input.supportContentCandidates ?? []).filter((candidate) => {
+      const href = getSupportHref(candidate);
+      if (!href) return false;
+      if (candidate.intel_type === 'quick_action_intro') return false;
+      return true;
+    })
+  );
 
   if (!candidates.length) {
     return null;
@@ -47,14 +72,7 @@ function buildRecommendedSupportContent(
     : null;
 
   if (byWorkout) {
-    return {
-      id: byWorkout.id,
-      title: normalizeText(byWorkout.title) || 'Support content',
-      body: getSupportBody(byWorkout),
-      href: getSupportHref(byWorkout),
-      contentType: byWorkout.content_type || 'content',
-      reasonLabel: 'Support your next session',
-    };
+    return buildSupportResult(byWorkout, 'Support your next session');
   }
 
   const byProgram = nextTrainingProgramId
@@ -64,14 +82,7 @@ function buildRecommendedSupportContent(
     : null;
 
   if (byProgram) {
-    return {
-      id: byProgram.id,
-      title: normalizeText(byProgram.title) || 'Support content',
-      body: getSupportBody(byProgram),
-      href: getSupportHref(byProgram),
-      contentType: byProgram.content_type || 'content',
-      reasonLabel: 'Built for your training path',
-    };
+    return buildSupportResult(byProgram, 'Built for your training path');
   }
 
   const systemKeyPriority =
@@ -79,41 +90,42 @@ function buildRecommendedSupportContent(
       ? ['challenge_start', 'methodology_intro', 'onboarding']
       : recommendationType === 'continue_challenge'
         ? ['challenge_continue', 'habit_loop', 'methodology']
-        : continuationState === 'paused'
-          ? ['reset', 'restart', 'mindset']
-          : continuationState === 'new'
-            ? ['onboarding', 'methodology_intro']
-            : ['methodology', 'habit_loop'];
+        : recommendationType === 'resume_program'
+          ? ['resume_training', 'methodology', 'habit_loop']
+          : continuationState === 'paused'
+            ? ['reset', 'restart', 'mindset']
+            : continuationState === 'new'
+              ? ['onboarding', 'methodology_intro']
+              : ['methodology', 'habit_loop'];
 
   for (const key of systemKeyPriority) {
-    const systemKeyMatch = candidates.find((candidate) => candidate.system_key === key);
+    const systemKeyMatch = candidates.find(
+      (candidate) => candidate.system_key === key
+    );
     if (systemKeyMatch) {
-      return {
-        id: systemKeyMatch.id,
-        title: normalizeText(systemKeyMatch.title) || 'Support content',
-        body: getSupportBody(systemKeyMatch),
-        href: getSupportHref(systemKeyMatch),
-        contentType: systemKeyMatch.content_type || 'content',
-        reasonLabel: 'Support for today',
-      };
+      return buildSupportResult(systemKeyMatch, 'Support for today');
     }
   }
 
-  const primaryFallback =
-    candidates.find((candidate) => candidate.is_primary === true) ?? candidates[0];
+  const strictPrimaryFallback = candidates.find(
+    (candidate) =>
+      candidate.is_primary === true &&
+      (
+        candidate.training_program_id === nextTrainingProgramId ||
+        candidate.workout_id === nextWorkoutId ||
+        candidate.system_key === 'methodology' ||
+        candidate.system_key === 'habit_loop' ||
+        candidate.system_key === 'post_session' ||
+        candidate.system_key === 'recovery' ||
+        candidate.system_key === 'reflection'
+      )
+  );
 
-  if (!primaryFallback) {
-    return null;
+  if (strictPrimaryFallback) {
+    return buildSupportResult(strictPrimaryFallback, 'Support for today');
   }
 
-  return {
-    id: primaryFallback.id,
-    title: normalizeText(primaryFallback.title) || 'Support content',
-    body: getSupportBody(primaryFallback),
-    href: getSupportHref(primaryFallback),
-    contentType: primaryFallback.content_type || 'content',
-    reasonLabel: 'Support for today',
-  };
+  return null;
 }
 
 export function buildRecommendationState(
@@ -136,12 +148,17 @@ export function buildRecommendationState(
     nextBestSession,
   });
 
-  const challengeWorkoutIds = new Set(input.challengeWorkouts.map((workout) => workout.id));
+  const challengeWorkoutIds = new Set(
+    input.challengeWorkouts.map((workout) => workout.id)
+  );
 
   const completedChallengeCount = new Set(
     input.completedLogs
       .map((log) => log.workout_id)
-      .filter((workoutId): workoutId is string => Boolean(workoutId && challengeWorkoutIds.has(workoutId)))
+      .filter(
+        (workoutId): workoutId is string =>
+          Boolean(workoutId && challengeWorkoutIds.has(workoutId))
+      )
   ).size;
 
   const nextWorkout = input.challengeWorkouts.find(
@@ -153,7 +170,9 @@ export function buildRecommendationState(
     nextBestSession.recommendationType,
     continuation.state,
     nextBestSession.nextSession.workoutId,
-    nextWorkout?.training_program_id ?? nextBestSession.nextSession.trainingProgramId ?? null
+    nextWorkout?.training_program_id ??
+      nextBestSession.nextSession.trainingProgramId ??
+      null
   );
 
   return {

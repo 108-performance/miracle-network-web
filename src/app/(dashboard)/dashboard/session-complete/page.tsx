@@ -5,6 +5,7 @@ import type {
   ChallengeWorkoutRow,
   CompletedLogRow,
   ContinuationPathType,
+  SupportContentCandidate,
 } from '@/core/protected/recommendation/types';
 import { createClient } from '@/lib/supabase/server';
 
@@ -115,6 +116,37 @@ function extractMetricValue(
   return row.actual_reps ?? null;
 }
 
+function SupportContentCard({
+  title,
+  body,
+  href,
+  reasonLabel,
+}: {
+  title: string;
+  body: string;
+  href: string;
+  reasonLabel: string;
+}) {
+  return (
+    <section className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <p className="text-xs uppercase tracking-wide text-white/45">
+        {reasonLabel}
+      </p>
+      <p className="mt-2 text-base text-white/85">{title}</p>
+      <p className="mt-1 text-sm text-white/60">{body}</p>
+
+      <div className="mt-4">
+        <Link
+          href={href}
+          className="inline-flex h-11 items-center justify-center rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-white transition hover:bg-white/10"
+        >
+          Open Support
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 export default async function SessionCompletePage({
   searchParams,
 }: {
@@ -184,7 +216,7 @@ export default async function SessionCompletePage({
   const { data: challengeWorkoutRows, error: challengeWorkoutRowsError } =
     await supabase
       .from('workouts')
-      .select('id, title, day_order')
+      .select('id, title, day_order, training_program_id')
       .eq('training_program_id', CHALLENGE_PROGRAM_ID)
       .order('day_order', { ascending: true });
 
@@ -192,8 +224,35 @@ export default async function SessionCompletePage({
     notFound();
   }
 
+  const { data: supportContentCandidatesData, error: supportContentError } =
+    await supabase
+      .from('content_posts')
+      .select(
+        `
+        id,
+        title,
+        description,
+        short_text,
+        content_type,
+        intel_type,
+        system_key,
+        training_program_id,
+        workout_id,
+        external_url,
+        file_url,
+        is_primary
+      `
+      )
+      .eq('status', 'published')
+      .in('audience', ['athletes', 'both']);
+
+  if (supportContentError) {
+    notFound();
+  }
+
   const completedLogs = (completedWorkoutLogs ?? []) as CompletedLogRow[];
   const challengeWorkouts = (challengeWorkoutRows ?? []) as ChallengeWorkoutRow[];
+  const supportContentCandidates = (supportContentCandidatesData ?? []) as SupportContentCandidate[];
 
   const currentPathType: ContinuationPathType =
     workout.training_program_id === CHALLENGE_PROGRAM_ID
@@ -207,6 +266,7 @@ export default async function SessionCompletePage({
     currentWorkoutTitle: workout.title ?? 'Workout',
     currentWorkoutDayOrder: workout.day_order ?? null,
     currentPathType,
+    supportContentCandidates,
   });
 
   const {
@@ -399,6 +459,15 @@ export default async function SessionCompletePage({
           <p className="mt-2 text-lg font-medium">{momentumHeadline}</p>
           <p className="mt-1 text-sm text-white/65">{momentumSubtext}</p>
         </section>
+
+        {recommendation.supportContent ? (
+          <SupportContentCard
+            title={recommendation.supportContent.title}
+            body={recommendation.supportContent.body}
+            href={recommendation.supportContent.href}
+            reasonLabel={recommendation.supportContent.reasonLabel}
+          />
+        ) : null}
 
         {nextUpHeadline || nextUpSubtext ? (
           <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">

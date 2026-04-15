@@ -117,9 +117,8 @@ export async function getDashboardData(userId: string) {
     console.error('DASHBOARD weeklyExerciseLogsError', weeklyExerciseLogsError);
   }
 
-  const { data: exerciseVariants, error: exerciseVariantsError } = await supabase
-    .from('exercise_variants')
-    .select('id, movement_id, name');
+  const { data: exerciseVariants, error: exerciseVariantsError } =
+    await supabase.from('exercise_variants').select('id, movement_id, name');
 
   if (exerciseVariantsError) {
     console.error('DASHBOARD exerciseVariantsError', exerciseVariantsError);
@@ -135,7 +134,7 @@ export async function getDashboardData(userId: string) {
 
   const { data: quickIntros, error: quickIntrosError } = await supabase
     .from('content_posts')
-    .select('title, external_url, system_key, audience')
+    .select('title, external_url, file_url, system_key, audience')
     .eq('intel_type', 'quick_action_intro')
     .eq('status', 'published')
     .in('audience', ['athletes', 'both']);
@@ -144,27 +143,27 @@ export async function getDashboardData(userId: string) {
     console.error('DASHBOARD quickIntrosError', quickIntrosError);
   }
 
-  const { data: supportContentCandidates, error: supportContentError } = await supabase
-    .from('content_posts')
-    .select(
+  const { data: supportContentCandidates, error: supportContentError } =
+    await supabase
+      .from('content_posts')
+      .select(
+        `
+        id,
+        title,
+        description,
+        short_text,
+        content_type,
+        intel_type,
+        system_key,
+        training_program_id,
+        workout_id,
+        external_url,
+        file_url,
+        is_primary
       `
-      id,
-      title,
-      description,
-      short_text,
-      content_type,
-      intel_type,
-      system_key,
-      training_program_id,
-      workout_id,
-      external_url,
-      file_url,
-      is_primary
-    `
-    )
-    .eq('status', 'published')
-    .in('audience', ['athletes', 'both'])
-    .not('external_url', 'is', null);
+      )
+      .eq('status', 'published')
+      .in('audience', ['athletes', 'both']);
 
   if (supportContentError) {
     console.error('DASHBOARD supportContentError', supportContentError);
