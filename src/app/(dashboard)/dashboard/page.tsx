@@ -1,7 +1,9 @@
 import QuickActionsClient from '@/components/dashboard/QuickActionsClient';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { getDashboardState } from '@/core/protected/dashboard/getDashboardState';
+import { buildRecommendationState } from '@/core/protected/recommendation/buildRecommendationState';
+import type { RecommendationState } from '@/core/protected/recommendation/types';
+import { getDashboardRingState } from '@/core/display/dashboard/getDashboardRingState';
 import { getDashboardData } from '@/lib/data/dashboard/getDashboardData';
 
 export const dynamic = 'force-dynamic';
@@ -195,6 +197,112 @@ function TripleProgressRings({
   );
 }
 
+function getLastWorkoutLabel(daysSinceLastSession: number | null) {
+  if (daysSinceLastSession === null) return 'No session logged yet';
+  if (daysSinceLastSession === 0) return 'Completed today';
+  if (daysSinceLastSession === 1) return 'Completed yesterday';
+  return `Completed ${daysSinceLastSession} days ago`;
+}
+
+function getStreakBadgeLabel(
+  streakCount: number,
+  daysSinceLastSession: number | null
+) {
+  if (streakCount > 1) return `🔥 ${streakCount} day streak`;
+  if (streakCount === 1 && daysSinceLastSession === 0) return '🔥 1 day streak';
+  if (daysSinceLastSession === 1) return 'Train today';
+  return 'Start your streak';
+}
+
+function getContinuationTitle(state: 'new' | 'active' | 'paused') {
+  if (state === 'active') return 'You’re in rhythm.';
+  if (state === 'paused') return 'Let’s build momentum again.';
+  return 'Start your momentum.';
+}
+
+function getContinuationBody({
+  state,
+  streakCount,
+  sessionsThisWeek,
+  daysSinceLastSession,
+}: {
+  state: 'new' | 'active' | 'paused';
+  streakCount: number;
+  sessionsThisWeek: number;
+  daysSinceLastSession: number | null;
+}) {
+  if (state === 'new') {
+    return 'Your dashboard will get smarter after your first completed session.';
+  }
+
+  if (state === 'paused') {
+    return daysSinceLastSession !== null
+      ? `It has been ${daysSinceLastSession} days since your last session. A quick session today gets you moving again.`
+      : 'A quick session today gets you moving again.';
+  }
+
+  if (streakCount >= 3) {
+    return `${streakCount} day streak. ${sessionsThisWeek} sessions logged this week.`;
+  }
+
+  if (streakCount === 2) {
+    return `2 day streak. One more day makes this feel real. ${sessionsThisWeek} sessions this week.`;
+  }
+
+  return `${sessionsThisWeek} session${sessionsThisWeek === 1 ? '' : 's'} logged this week. Keep it moving today.`;
+}
+
+function getDashboardPrimaryCta(recommendation: RecommendationState) {
+  const primary = recommendation.nextBestSession.primaryCta;
+  const nextSession = recommendation.nextBestSession.nextSession;
+
+  if (
+    primary.href === '/dashboard/compete/108-athlete-challenge' &&
+    nextSession.workoutId
+  ) {
+    return {
+      label:
+        recommendation.context.completedChallengeCount > 0
+          ? 'Continue Session'
+          : 'Start Session',
+      href: nextSession.href,
+    };
+  }
+
+  return primary;
+}
+
+function getDashboardSecondaryCta(recommendation: RecommendationState) {
+  const secondary = recommendation.nextBestSession.secondaryCta;
+
+  if (secondary.href === '/dashboard') {
+    return {
+      label: 'View Challenge',
+      href: '/dashboard/compete/108-athlete-challenge',
+    };
+  }
+
+  return secondary;
+}
+
+function getHeroSupportLabel(recommendation: RecommendationState) {
+  const { messaging, nextBestSession, continuation, context } = recommendation;
+
+  if (messaging.supportLabel?.trim()) {
+    return messaging.supportLabel;
+  }
+
+  if (nextBestSession.nextSession.dayOrder != null) {
+    return `Next up: Day ${nextBestSession.nextSession.dayOrder}`;
+  }
+
+  if (continuation.hasCompletedAnySession) {
+    return `${context.completedChallengeCount} / ${context.totalChallengeCount} challenge sessions completed`;
+  }
+
+  return 'No completed sessions yet';
+}
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
@@ -277,27 +385,41 @@ export default async function DashboardPage() {
 
   const dashboardData = await getDashboardData(user.id);
 
-  const dashboardState = getDashboardState({
+  const recommendation = buildRecommendationState({
     completedLogs: dashboardData.completedLogs,
     challengeWorkouts: dashboardData.challengeWorkouts,
-    latestWorkoutTitle: dashboardData.latestWorkoutTitle,
-    latestScore: dashboardData.latestScore,
+    currentWorkoutId: null,
+    currentPathType: 'unknown',
+  });
+
+  const primaryCta = getDashboardPrimaryCta(recommendation);
+  const secondaryCta = getDashboardSecondaryCta(recommendation);
+
+  const rings = getDashboardRingState({
     weeklyExerciseLogs: dashboardData.weeklyExerciseLogs,
     exerciseVariants: dashboardData.exerciseVariants,
     movements: dashboardData.movements,
   });
 
-  const {
-    daysAgo,
-    lastWorkoutLabel,
-    streakBadgeLabel,
-    heroState,
-    momentumTitle,
-    momentumLine,
-    lastSessionReflection,
-    latestScoreLabel,
-    rings,
-  } = dashboardState;
+  const streakBadgeLabel = getStreakBadgeLabel(
+    recommendation.continuation.streakCount,
+    recommendation.continuation.daysSinceLastSession
+  );
+
+  const lastWorkoutLabel = getLastWorkoutLabel(
+    recommendation.continuation.daysSinceLastSession
+  );
+
+  const latestScoreLabel = dashboardData.latestScore ?? 'No score yet';
+
+  const lastSessionReflection =
+    recommendation.continuation.state === 'new'
+      ? 'Start your first session to begin tracking progress.'
+      : recommendation.continuation.daysSinceLastSession === 0
+        ? 'You completed this session today.'
+        : recommendation.continuation.daysSinceLastSession === 1
+          ? 'You trained yesterday. Stay consistent.'
+          : 'Pick this back up today.';
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl bg-black px-6 py-8 text-white">
@@ -310,7 +432,9 @@ export default async function DashboardPage() {
             Welcome back, {dashboardData.athleteName}
           </h1>
           <p className="mt-3 max-w-2xl text-base text-zinc-400 sm:text-lg">
-            {daysAgo === 0 ? "Let's keep your momentum going." : lastWorkoutLabel}
+            {recommendation.continuation.daysSinceLastSession === 0
+              ? "Let's keep your momentum going."
+              : lastWorkoutLabel}
           </p>
         </div>
 
@@ -329,31 +453,35 @@ export default async function DashboardPage() {
             </p>
 
             <h2 className="mt-5 max-w-2xl text-3xl font-extrabold leading-tight text-white sm:text-5xl">
-              {heroState.headline}
+              {recommendation.messaging.headline}
             </h2>
 
             <p className="mt-4 max-w-2xl text-base text-zinc-300 sm:text-lg">
-              {heroState.subtext}
+              {recommendation.messaging.subtext}
             </p>
 
             <div className="mt-5 space-y-2">
-              <p className="text-sm font-medium text-white">{heroState.progressLabel}</p>
-              <p className="text-sm text-zinc-400">{heroState.supportLabel}</p>
+              <p className="text-sm font-medium text-white">
+                {recommendation.nextBestSession.nextSession.title}
+              </p>
+              <p className="text-sm text-zinc-400">
+                {getHeroSupportLabel(recommendation)}
+              </p>
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
-                href={heroState.ctaHref}
+                href={primaryCta.href}
                 className="inline-flex items-center justify-center rounded-2xl bg-lime-400 px-5 py-3 text-sm font-bold text-black transition hover:opacity-90"
               >
-                {heroState.ctaLabel}
+                {primaryCta.label}
               </Link>
 
               <Link
-                href="/dashboard/compete/108-athlete-challenge"
+                href={secondaryCta.href}
                 className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
               >
-                View Challenge
+                {secondaryCta.label}
               </Link>
             </div>
           </div>
@@ -369,8 +497,13 @@ export default async function DashboardPage() {
       <section className="mb-6 grid gap-4 md:grid-cols-2">
         <InfoCard
           eyebrow="Your Momentum"
-          title={momentumTitle}
-          body={momentumLine}
+          title={getContinuationTitle(recommendation.continuation.state)}
+          body={getContinuationBody({
+            state: recommendation.continuation.state,
+            streakCount: recommendation.continuation.streakCount,
+            sessionsThisWeek: recommendation.continuation.sessionsThisWeek,
+            daysSinceLastSession: recommendation.continuation.daysSinceLastSession,
+          })}
           accent="purple"
           footer={
             <div className="grid grid-cols-3 gap-3 rounded-2xl border border-white/5 bg-white/[0.02] p-4">

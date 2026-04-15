@@ -331,17 +331,15 @@ export default function WorkoutRunner({
   }
 
   function buildCompletionRedirectUrl() {
-    const completedLogsAfterSession = [
-      ...recommendationSeed.completedLogs,
-      {
-        completed_at: new Date().toISOString(),
-        workout_id: workoutId,
-      },
-    ];
-
     const recommendation = buildRecommendationState({
       ...recommendationSeed,
-      completedLogs: completedLogsAfterSession,
+      completedLogs: [
+        {
+          completed_at: new Date().toISOString(),
+          workout_id: workoutId,
+        },
+        ...recommendationSeed.completedLogs,
+      ],
       currentWorkoutId: workoutId,
       currentWorkoutTitle: title,
     });
@@ -414,17 +412,23 @@ export default function WorkoutRunner({
       source:
         recommendation.nextBestSession.nextSession.pathType === 'challenge'
           ? 'challenge'
-          : 'workout',
+          : recommendation.nextBestSession.nextSession.pathType === 'program'
+            ? 'program'
+            : 'workout',
       today: anchor?.currentValue != null ? String(anchor.currentValue) : '',
       best: anchor?.bestValue != null ? String(anchor.bestValue) : '',
       last: anchor?.lastValue != null ? String(anchor.lastValue) : '',
       change: anchor?.changeValue != null ? String(anchor.changeValue) : '',
       streak: String(recommendation.continuation.streakCount),
       week: String(recommendation.continuation.sessionsThisWeek),
-      next: recommendation.nextBestSession.primaryCta.href,
+      next: recommendation.nextBestSession.nextSession.href,
       nextLabel: recommendation.nextBestSession.nextSession.title,
       nextSubtext: recommendation.messaging.subtext,
       primaryLabel: recommendation.nextBestSession.primaryCta.label,
+      secondaryLabel: recommendation.nextBestSession.secondaryCta.label,
+      secondaryHref: recommendation.nextBestSession.secondaryCta.href,
+      headline: recommendation.messaging.headline,
+      supportLabel: recommendation.messaging.supportLabel,
     });
 
     return `/dashboard/session-complete?${params.toString()}`;
@@ -548,8 +552,15 @@ export default function WorkoutRunner({
             result.savedExerciseLogs === 1 ? '' : 's'
           } recorded.`
         );
+
+        const redirectUrl = buildCompletionRedirectUrl();
+
         setCompleted(true);
         setStarted(false);
+
+        if (typeof window !== 'undefined') {
+          window.location.href = redirectUrl;
+        }
       } catch (error) {
         console.error(error);
         setErrorMessage(
@@ -562,10 +573,6 @@ export default function WorkoutRunner({
   }
 
   if (completed) {
-    if (typeof window !== 'undefined') {
-      window.location.href = buildCompletionRedirectUrl();
-    }
-
     return null;
   }
 

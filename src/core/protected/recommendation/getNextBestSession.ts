@@ -15,7 +15,9 @@ function getChallengeRunHref(workoutId: string) {
 
 function sortChallengeWorkouts(workouts: ChallengeWorkoutRow[]) {
   return [...workouts].sort(
-    (a, b) => (a.day_order ?? Number.MAX_SAFE_INTEGER) - (b.day_order ?? Number.MAX_SAFE_INTEGER)
+    (a, b) =>
+      (a.day_order ?? Number.MAX_SAFE_INTEGER) -
+      (b.day_order ?? Number.MAX_SAFE_INTEGER)
   );
 }
 
@@ -30,17 +32,69 @@ export function getNextBestSession({
   currentWorkoutId?: string | null;
   currentPathType?: ContinuationPathType;
 }): NextBestSessionResult {
+  if (!challengeWorkouts.length) {
+    return {
+      recommendationType: 'return_to_dashboard',
+      primaryCta: {
+        label: 'Back to Dashboard',
+        href: DASHBOARD_HREF,
+      },
+      secondaryCta: {
+        label: 'Browse Workouts',
+        href: WORKOUT_BROWSE_HREF,
+      },
+      nextSession: {
+        workoutId: null,
+        title: 'Choose your next workout',
+        href: DASHBOARD_HREF,
+        pathType: 'none',
+        dayOrder: null,
+      },
+    };
+  }
+
   const sortedChallengeWorkouts = sortChallengeWorkouts(challengeWorkouts);
-  const challengeWorkoutIds = new Set(sortedChallengeWorkouts.map((workout) => workout.id));
+  const challengeWorkoutIds = new Set(
+    sortedChallengeWorkouts.map((workout) => workout.id)
+  );
 
   const completedChallengeWorkoutIds = new Set(
     completedLogs
       .map((log) => log.workout_id)
-      .filter((workoutId): workoutId is string => Boolean(workoutId && challengeWorkoutIds.has(workoutId)))
+      .filter(
+        (workoutId): workoutId is string =>
+          Boolean(workoutId && challengeWorkoutIds.has(workoutId))
+      )
   );
 
   const nextIncompleteChallengeWorkout =
-    sortedChallengeWorkouts.find((workout) => !completedChallengeWorkoutIds.has(workout.id)) ?? null;
+    sortedChallengeWorkouts.find(
+      (workout) => !completedChallengeWorkoutIds.has(workout.id)
+    ) ?? null;
+
+  const latestWorkoutId =
+    completedLogs.length > 0 ? completedLogs[0].workout_id : null;
+
+  if (latestWorkoutId && !challengeWorkoutIds.has(latestWorkoutId)) {
+    return {
+      recommendationType: 'resume_program',
+      primaryCta: {
+        label: 'Resume Training',
+        href: `/dashboard/training/${latestWorkoutId}/run`,
+      },
+      secondaryCta: {
+        label: 'Back to Dashboard',
+        href: DASHBOARD_HREF,
+      },
+      nextSession: {
+        workoutId: latestWorkoutId,
+        title: 'Resume your last session',
+        href: `/dashboard/training/${latestWorkoutId}/run`,
+        pathType: 'program',
+        dayOrder: null,
+      },
+    };
+  }
 
   const isCurrentWorkoutChallenge =
     (currentWorkoutId ? challengeWorkoutIds.has(currentWorkoutId) : false) ||

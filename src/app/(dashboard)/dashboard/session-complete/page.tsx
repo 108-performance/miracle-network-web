@@ -13,46 +13,16 @@ type SearchParams = {
   nextLabel?: string;
   nextSubtext?: string;
   primaryLabel?: string;
+  secondaryLabel?: string;
+  secondaryHref?: string;
+  headline?: string;
+  supportLabel?: string;
 };
 
 function toNumber(value?: string) {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getHeadline(change?: string, today?: string, best?: string, last?: string) {
-  const changeNumber = toNumber(change);
-  const todayNumber = toNumber(today);
-  const bestNumber = toNumber(best);
-  const lastNumber = toNumber(last);
-
-  if (changeNumber !== null && changeNumber > 0) {
-    return 'Nice work. You got better today.';
-  }
-
-  if (
-    todayNumber !== null &&
-    bestNumber !== null &&
-    todayNumber === bestNumber &&
-    todayNumber > 0
-  ) {
-    return 'You matched your best today.';
-  }
-
-  if (
-    todayNumber !== null &&
-    lastNumber !== null &&
-    todayNumber > lastNumber
-  ) {
-    return 'You improved from your last session.';
-  }
-
-  if (todayNumber !== null) {
-    return 'Work logged. Keep building.';
-  }
-
-  return 'Session complete.';
 }
 
 function getProgressMessage(
@@ -141,47 +111,6 @@ function getMomentumSubtext(streak?: string, week?: string) {
   return 'Come back tomorrow and build momentum';
 }
 
-function getPrimaryLabel(source?: string, primaryLabel?: string) {
-  if (primaryLabel) return primaryLabel;
-  if (source === 'challenge') return 'Continue Challenge';
-  return 'Back to Dashboard';
-}
-
-function getPrimaryHref(source?: string, next?: string) {
-  if (source === 'challenge' && next) return next;
-  return next || '/dashboard';
-}
-
-function getSecondaryLabel(source?: string) {
-  if (source === 'challenge') return 'Back to Dashboard';
-  return 'Browse Workouts';
-}
-
-function getSecondaryHref(source?: string) {
-  if (source === 'challenge') return '/dashboard';
-  return '/dashboard/workout';
-}
-
-function getNextUpHeadline(source?: string, nextLabel?: string) {
-  if (nextLabel) return nextLabel;
-
-  if (source === 'challenge') {
-    return 'Your next challenge session is ready.';
-  }
-
-  return 'Choose your next workout and keep momentum going.';
-}
-
-function getNextUpSubtext(source?: string, nextSubtext?: string) {
-  if (nextSubtext) return nextSubtext;
-
-  if (source === 'challenge') {
-    return 'Stay on track and continue your progression.';
-  }
-
-  return 'Stack another session and build consistency.';
-}
-
 function displayValue(value?: string, fallback = '--') {
   if (!value || value.trim() === '' || value === 'null') {
     return fallback;
@@ -197,29 +126,26 @@ export default async function SessionCompletePage({
   const params = await searchParams;
 
   const title = params.title || 'Workout Session';
-  const source = params.source || 'workout';
   const today = params.today;
   const best = params.best;
   const last = params.last;
   const change = params.change;
   const streak = params.streak;
   const week = params.week;
-  const next = params.next;
-  const nextLabel = params.nextLabel;
-  const nextSubtext = params.nextSubtext;
-  const primaryLabelParam = params.primaryLabel;
 
-  const headline = getHeadline(change, today, best, last);
+  const headline = params.headline || 'Session complete.';
+  const supportLabel = params.supportLabel || 'Keep building.';
+  const nextUpHeadline = params.nextLabel || 'Choose your next session.';
+  const nextUpSubtext =
+    params.nextSubtext || 'Keep your momentum moving.';
+  const primaryLabel = params.primaryLabel || 'Back to Dashboard';
+  const primaryHref = params.next || '/dashboard';
+  const secondaryLabel = params.secondaryLabel || 'Browse Workouts';
+  const secondaryHref = params.secondaryHref || '/dashboard/workout';
+
   const progressMessage = getProgressMessage(change, today, last, best);
   const momentumHeadline = getMomentumHeadline(streak, week);
   const momentumSubtext = getMomentumSubtext(streak, week);
-  const nextUpHeadline = getNextUpHeadline(source, nextLabel);
-  const nextUpSubtext = getNextUpSubtext(source, nextSubtext);
-
-  const primaryLabel = getPrimaryLabel(source, primaryLabelParam);
-  const primaryHref = getPrimaryHref(source, next);
-  const secondaryLabel = getSecondaryLabel(source);
-  const secondaryHref = getSecondaryHref(source);
 
   return (
     <main className="min-h-screen bg-black text-white">
@@ -239,6 +165,10 @@ export default async function SessionCompletePage({
 
           <p className="mt-3 text-sm text-white/65">
             {title}
+          </p>
+
+          <p className="mt-2 text-sm text-white/55">
+            {supportLabel}
           </p>
         </div>
 
