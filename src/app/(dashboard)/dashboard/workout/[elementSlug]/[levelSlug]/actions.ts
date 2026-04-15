@@ -1,6 +1,12 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { buildRecommendationState } from '@/core/protected/recommendation/buildRecommendationState';
+import type {
+  ChallengeWorkoutRow,
+  CompletedLogRow,
+  ContinuationPathType,
+} from '@/core/protected/recommendation/types';
 import { createClient } from '@/lib/supabase/server';
 
 type ExerciseLogInput = {
@@ -21,10 +27,16 @@ type SaveWorkoutSessionInput = {
   exercises: ExerciseLogInput[];
 };
 
+const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
+
 function toNumberOrNull(value?: string) {
   if (!value || value.trim() === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildSessionCompleteRedirectUrl(workoutLogId: string) {
+  return `/dashboard/session-complete?workoutLogId=${encodeURIComponent(workoutLogId)}`;
 }
 
 export async function saveWorkoutSessionAction(
@@ -127,12 +139,25 @@ export async function saveWorkoutSessionAction(
     athlete = createdAthlete;
   }
 
+  const { data: currentWorkout, error: currentWorkoutError } = await supabase
+    .from('workouts')
+    .select('id, title, day_order, training_program_id')
+    .eq('id', input.workoutId)
+    .maybeSingle();
+
+  if (currentWorkoutError || !currentWorkout) {
+    console.error('current workout lookup error:', currentWorkoutError);
+    throw new Error('Failed to load current workout.');
+  }
+
+  const completedAt = new Date().toISOString();
+
   const { data: workoutLog, error: workoutLogError } = await supabase
     .from('workout_logs')
     .insert({
       athlete_id: athlete.id,
       workout_id: input.workoutId,
-      completed_at: new Date().toISOString(),
+      completed_at: completedAt,
     })
     .select('id')
     .single();
@@ -181,13 +206,60 @@ export async function saveWorkoutSessionAction(
     }
   }
 
+  const { data: completedWorkoutLogs, error: completedWorkoutLogsError } =
+    await supabase
+      .from('workout_logs')
+      .select('completed_at, workout_id')
+      .eq('athlete_id', athlete.id)
+      .not('completed_at', 'is', null)
+      .order('completed_at', { ascending: false });
+
+  if (completedWorkoutLogsError) {
+    console.error('completed workout logs error:', completedWorkoutLogsError);
+    throw new Error('Failed to load completed workout history.');
+  }
+
+  const { data: challengeWorkoutRows, error: challengeWorkoutRowsError } =
+    await supabase
+      .from('workouts')
+      .select('id, title, day_order')
+      .eq('training_program_id', CHALLENGE_PROGRAM_ID)
+      .order('day_order', { ascending: true });
+
+  if (challengeWorkoutRowsError) {
+    console.error('challenge workouts error:', challengeWorkoutRowsError);
+    throw new Error('Failed to load challenge workouts.');
+  }
+
+  const completedLogs = (completedWorkoutLogs ?? []) as CompletedLogRow[];
+  const challengeWorkouts = (challengeWorkoutRows ?? []) as ChallengeWorkoutRow[];
+
+  const currentPathType: ContinuationPathType =
+    currentWorkout.training_program_id === CHALLENGE_PROGRAM_ID
+      ? 'challenge'
+      : 'workout';
+
+  const recommendation = buildRecommendationState({
+    completedLogs,
+    challengeWorkouts,
+    currentWorkoutId: currentWorkout.id,
+    currentWorkoutTitle: currentWorkout.title ?? input.workoutTitle,
+    currentWorkoutDayOrder: currentWorkout.day_order ?? null,
+    currentPathType,
+  });
+
   revalidatePath('/dashboard');
   revalidatePath('/dashboard/workout');
   revalidatePath(`/dashboard/workout/${input.elementSlug}/${input.levelSlug}`);
+  revalidatePath(`/dashboard/training/${input.workoutId}/run`);
+  revalidatePath('/dashboard/session-complete');
 
   return {
     success: true,
     savedExerciseLogs: rowsToInsert.length,
     workoutTitle: input.workoutTitle,
+    workoutLogId: workoutLog.id,
+    recommendation,
+    redirectUrl: buildSessionCompleteRedirectUrl(workoutLog.id),
   };
 }

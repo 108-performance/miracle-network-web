@@ -76,19 +76,6 @@ type ContentPost = {
   created_at: string | null;
 };
 
-type CompletedLogRow = {
-  completed_at: string;
-  workout_id: string | null;
-};
-
-type ChallengeWorkoutRow = {
-  id: string;
-  title: string | null;
-  day_order: number | null;
-};
-
-const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
-
 function normalizeMetricType(metricType?: string | null) {
   const normalized = (metricType ?? '').toLowerCase().trim();
 
@@ -355,8 +342,6 @@ export default async function RunWorkoutPage({
     }, {});
 
   let progressionByExerciseId: Record<string, ExerciseProgression> = {};
-  let completedLogs: CompletedLogRow[] = [];
-  let challengeWorkouts: ChallengeWorkoutRow[] = [];
 
   if (athlete?.id && exerciseIds.length > 0) {
     const { data: progressionRows } = await supabase
@@ -372,25 +357,6 @@ export default async function RunWorkoutPage({
       (progressionRows ?? []) as ExerciseProgressionRow[],
       metricTypeByExerciseId
     );
-  }
-
-  if (athlete?.id) {
-    const { data: completedWorkoutLogs } = await supabase
-      .from('workout_logs')
-      .select('completed_at, workout_id')
-      .eq('athlete_id', athlete.id)
-      .not('completed_at', 'is', null)
-      .order('completed_at', { ascending: false });
-
-    completedLogs = (completedWorkoutLogs ?? []) as CompletedLogRow[];
-
-    const { data: challengeWorkoutRows } = await supabase
-      .from('workouts')
-      .select('id, title, day_order')
-      .eq('training_program_id', CHALLENGE_PROGRAM_ID)
-      .order('day_order', { ascending: true });
-
-    challengeWorkouts = (challengeWorkoutRows ?? []) as ChallengeWorkoutRow[];
   }
 
   const exercises = workoutExercises.map((item) => {
@@ -444,17 +410,6 @@ export default async function RunWorkoutPage({
           exercises={exercises}
           isGuest={isGuest}
           autoStart={true}
-          recommendationSeed={{
-            completedLogs,
-            challengeWorkouts,
-            currentWorkoutId: workout.id,
-            currentWorkoutTitle: workout.title ?? 'Workout',
-            currentWorkoutDayOrder: workout.day_order ?? null,
-            currentPathType:
-              workout.training_program_id === CHALLENGE_PROGRAM_ID
-                ? 'challenge'
-                : 'workout',
-          }}
         />
       </div>
     </main>

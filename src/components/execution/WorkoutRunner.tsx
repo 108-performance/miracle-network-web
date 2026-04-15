@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { saveWorkoutSessionAction } from '@/app/(dashboard)/dashboard/workout/[elementSlug]/[levelSlug]/actions';
-import { buildRecommendationState } from '@/core/protected/recommendation/buildRecommendationState';
-import type { RecommendationInput } from '@/core/protected/recommendation/types';
 
 type ExerciseContent = {
   title: string;
@@ -196,14 +194,12 @@ export default function WorkoutRunner({
   exercises,
   isGuest,
   autoStart = false,
-  recommendationSeed,
 }: {
   workoutId: string;
   title: string;
   exercises: Exercise[];
   isGuest: boolean;
   autoStart?: boolean;
-  recommendationSeed: RecommendationInput;
 }) {
   const [started, setStarted] = useState(autoStart);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -287,28 +283,6 @@ export default function WorkoutRunner({
     window.location.href = `/login?next=${encodeURIComponent(nextPath)}`;
   }
 
-  function toNumberOrNull(value: string) {
-    if (!value || value.trim() === '') return null;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  function getMetricValueFromLog(log: LogState, metricType?: string | null) {
-    if (metricType === 'time') return toNumberOrNull(log.timeSeconds);
-    if (metricType === 'score') return toNumberOrNull(log.score);
-    if (metricType === 'exit_velocity') return toNumberOrNull(log.exitVelocity);
-    if (metricType === 'mixed') {
-      return (
-        toNumberOrNull(log.score) ??
-        toNumberOrNull(log.exitVelocity) ??
-        toNumberOrNull(log.reps) ??
-        toNumberOrNull(log.timeSeconds)
-      );
-    }
-
-    return toNumberOrNull(log.reps);
-  }
-
   function getMetricValueFromSnapshot(
     snapshot: MetricSnapshot | null | undefined,
     metricType?: string | null
@@ -328,110 +302,6 @@ export default function WorkoutRunner({
     }
 
     return snapshot.reps ?? null;
-  }
-
-  function buildCompletionRedirectUrl() {
-    const recommendation = buildRecommendationState({
-      ...recommendationSeed,
-      completedLogs: [
-        {
-          completed_at: new Date().toISOString(),
-          workout_id: workoutId,
-        },
-        ...recommendationSeed.completedLogs,
-      ],
-      currentWorkoutId: workoutId,
-      currentWorkoutTitle: title,
-    });
-
-    const candidates = exercises
-      .map((exercise) => {
-        const metricType = exercise.metricType ?? 'reps';
-        const values = logs[exercise.exerciseId] ?? EMPTY_LOG;
-
-        const currentValue = getMetricValueFromLog(values, metricType);
-        const lastValue = getMetricValueFromSnapshot(
-          exercise.lastResult,
-          metricType
-        );
-        const bestValue = getMetricValueFromSnapshot(
-          exercise.bestResult,
-          metricType
-        );
-
-        const changeValue =
-          currentValue != null && lastValue != null ? currentValue - lastValue : null;
-
-        const hasData =
-          currentValue != null || lastValue != null || bestValue != null;
-
-        const improvedFromLast =
-          changeValue != null && changeValue > 0 ? 1 : 0;
-
-        const matchedBest =
-          currentValue != null &&
-          bestValue != null &&
-          currentValue === bestValue
-            ? 1
-            : 0;
-
-        const hasCurrentValue = currentValue != null ? 1 : 0;
-
-        return {
-          currentValue,
-          lastValue,
-          bestValue,
-          changeValue,
-          hasData,
-          improvedFromLast,
-          matchedBest,
-          hasCurrentValue,
-        };
-      })
-      .filter((candidate) => candidate.hasData)
-      .sort((a, b) => {
-        if (b.improvedFromLast !== a.improvedFromLast) {
-          return b.improvedFromLast - a.improvedFromLast;
-        }
-
-        if (b.matchedBest !== a.matchedBest) {
-          return b.matchedBest - a.matchedBest;
-        }
-
-        if (b.hasCurrentValue !== a.hasCurrentValue) {
-          return b.hasCurrentValue - a.hasCurrentValue;
-        }
-
-        return 0;
-      });
-
-    const anchor = candidates[0];
-
-    const params = new URLSearchParams({
-      title: title ?? 'Workout Session',
-      source:
-        recommendation.nextBestSession.nextSession.pathType === 'challenge'
-          ? 'challenge'
-          : recommendation.nextBestSession.nextSession.pathType === 'program'
-            ? 'program'
-            : 'workout',
-      today: anchor?.currentValue != null ? String(anchor.currentValue) : '',
-      best: anchor?.bestValue != null ? String(anchor.bestValue) : '',
-      last: anchor?.lastValue != null ? String(anchor.lastValue) : '',
-      change: anchor?.changeValue != null ? String(anchor.changeValue) : '',
-      streak: String(recommendation.continuation.streakCount),
-      week: String(recommendation.continuation.sessionsThisWeek),
-      next: recommendation.nextBestSession.nextSession.href,
-      nextLabel: recommendation.nextBestSession.nextSession.title,
-      nextSubtext: recommendation.messaging.subtext,
-      primaryLabel: recommendation.nextBestSession.primaryCta.label,
-      secondaryLabel: recommendation.nextBestSession.secondaryCta.label,
-      secondaryHref: recommendation.nextBestSession.secondaryCta.href,
-      headline: recommendation.messaging.headline,
-      supportLabel: recommendation.messaging.supportLabel,
-    });
-
-    return `/dashboard/session-complete?${params.toString()}`;
   }
 
   function formatPrescription() {
@@ -553,13 +423,11 @@ export default function WorkoutRunner({
           } recorded.`
         );
 
-        const redirectUrl = buildCompletionRedirectUrl();
-
         setCompleted(true);
         setStarted(false);
 
         if (typeof window !== 'undefined') {
-          window.location.href = redirectUrl;
+          window.location.href = result.redirectUrl;
         }
       } catch (error) {
         console.error(error);
