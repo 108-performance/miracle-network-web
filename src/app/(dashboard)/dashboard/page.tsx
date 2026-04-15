@@ -42,6 +42,41 @@ function InfoCard({
   );
 }
 
+function SupportContentCard({
+  recommendation,
+}: {
+  recommendation: RecommendationState;
+}) {
+  if (!recommendation.supportContent) return null;
+
+  return (
+    <section className="mb-6 rounded-[28px] border border-white/10 bg-zinc-950/90 p-6 shadow-[0_0_0_1px_rgba(255,255,255,0.02)]">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="max-w-2xl">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">
+            {recommendation.supportContent.reasonLabel}
+          </p>
+          <h3 className="mt-3 text-2xl font-bold text-white">
+            {recommendation.supportContent.title}
+          </h3>
+          <p className="mt-2 text-sm leading-6 text-zinc-400">
+            {recommendation.supportContent.body}
+          </p>
+        </div>
+
+        <div className="shrink-0">
+          <Link
+            href={recommendation.supportContent.href}
+            className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
+          >
+            Open Support
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TripleProgressRings({
   anchored,
   dynamic,
@@ -390,6 +425,7 @@ export default async function DashboardPage() {
     challengeWorkouts: dashboardData.challengeWorkouts,
     currentWorkoutId: null,
     currentPathType: 'unknown',
+    supportContentCandidates: dashboardData.supportContentCandidates,
   });
 
   const primaryCta = getDashboardPrimaryCta(recommendation);
@@ -493,6 +529,8 @@ export default async function DashboardPage() {
           />
         </div>
       </section>
+
+      <SupportContentCard recommendation={recommendation} />
 
       <section className="mb-6 grid gap-4 md:grid-cols-2">
         <InfoCard

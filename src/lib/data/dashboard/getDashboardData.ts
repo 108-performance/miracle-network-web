@@ -11,6 +11,7 @@ type ChallengeWorkoutRow = {
   id: string;
   title: string | null;
   day_order: number | null;
+  training_program_id: string | null;
 };
 
 type ExerciseLogRow = {
@@ -77,7 +78,7 @@ export async function getDashboardData(userId: string) {
   const { data: challengeWorkouts, error: challengeWorkoutsError } =
     await supabase
       .from('workouts')
-      .select('id, title, day_order')
+      .select('id, title, day_order, training_program_id')
       .eq('training_program_id', CHALLENGE_PROGRAM_ID)
       .order('day_order', { ascending: true });
 
@@ -141,6 +142,32 @@ export async function getDashboardData(userId: string) {
 
   if (quickIntrosError) {
     console.error('DASHBOARD quickIntrosError', quickIntrosError);
+  }
+
+  const { data: supportContentCandidates, error: supportContentError } = await supabase
+    .from('content_posts')
+    .select(
+      `
+      id,
+      title,
+      description,
+      short_text,
+      content_type,
+      intel_type,
+      system_key,
+      training_program_id,
+      workout_id,
+      external_url,
+      file_url,
+      is_primary
+    `
+    )
+    .eq('status', 'published')
+    .in('audience', ['athletes', 'both'])
+    .not('external_url', 'is', null);
+
+  if (supportContentError) {
+    console.error('DASHBOARD supportContentError', supportContentError);
   }
 
   const normalizedCompletedLogs = (completedLogs ?? []) as CompletedLogRow[];
@@ -207,6 +234,7 @@ export async function getDashboardData(userId: string) {
     exerciseVariants: exerciseVariantRows,
     movements: movementRows,
     quickIntros: quickIntros ?? [],
+    supportContentCandidates: supportContentCandidates ?? [],
     latestWorkoutTitle,
   };
 }
