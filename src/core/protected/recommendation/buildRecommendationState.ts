@@ -70,20 +70,23 @@ function buildRecommendedSupportContent(
       body: getSupportBody(byProgram),
       href: getSupportHref(byProgram),
       contentType: byProgram.content_type || 'content',
-      reasonLabel: 'Built for your training path',
+      reasonLabel: 'Built for your path',
     };
   }
 
   const systemKeyPriority =
-    recommendationType === 'start_challenge'
-      ? ['challenge_start', 'methodology_intro', 'onboarding']
-      : recommendationType === 'continue_challenge'
-        ? ['challenge_continue', 'habit_loop', 'methodology']
-        : continuationState === 'paused'
-          ? ['reset', 'restart', 'mindset']
-          : continuationState === 'new'
-            ? ['onboarding', 'methodology_intro']
-            : ['methodology', 'habit_loop'];
+    recommendationType === 'start_train_path'
+      ? ['train_start', 'methodology_intro', 'onboarding']
+      : recommendationType === 'continue_train_path' ||
+          recommendationType === 'resume_train_session'
+        ? ['train_continue', 'habit_loop', 'methodology']
+        : recommendationType === 'fallback_to_challenge'
+          ? ['challenge_continue', 'habit_loop', 'methodology']
+          : continuationState === 'paused'
+            ? ['reset', 'restart', 'mindset']
+            : continuationState === 'new'
+              ? ['onboarding', 'methodology_intro']
+              : ['methodology', 'habit_loop'];
 
   for (const key of systemKeyPriority) {
     const systemKeyMatch = candidates.find((candidate) => candidate.system_key === key);
@@ -119,6 +122,9 @@ function buildRecommendedSupportContent(
 export function buildRecommendationState(
   input: RecommendationInput
 ): RecommendationState {
+  const trainSessions = input.trainSessions ?? [];
+  const challengeWorkouts = input.challengeWorkouts ?? [];
+
   const continuation = getContinuationState({
     completedLogs: input.completedLogs,
     currentPathType: input.currentPathType,
@@ -126,7 +132,8 @@ export function buildRecommendationState(
 
   const nextBestSession = getNextBestSession({
     completedLogs: input.completedLogs,
-    challengeWorkouts: input.challengeWorkouts,
+    trainSessions,
+    challengeWorkouts,
     currentWorkoutId: input.currentWorkoutId,
     currentPathType: input.currentPathType,
   });
@@ -136,16 +143,31 @@ export function buildRecommendationState(
     nextBestSession,
   });
 
-  const challengeWorkoutIds = new Set(input.challengeWorkouts.map((workout) => workout.id));
+  const trainWorkoutIds = new Set(trainSessions.map((session) => session.id));
+  const challengeWorkoutIds = new Set(
+    challengeWorkouts.map((workout) => workout.id)
+  );
+
+  const completedTrainCount = new Set(
+    input.completedLogs
+      .map((log) => log.workout_id)
+      .filter(
+        (workoutId): workoutId is string =>
+          Boolean(workoutId && trainWorkoutIds.has(workoutId))
+      )
+  ).size;
 
   const completedChallengeCount = new Set(
     input.completedLogs
       .map((log) => log.workout_id)
-      .filter((workoutId): workoutId is string => Boolean(workoutId && challengeWorkoutIds.has(workoutId)))
+      .filter(
+        (workoutId): workoutId is string =>
+          Boolean(workoutId && challengeWorkoutIds.has(workoutId))
+      )
   ).size;
 
-  const nextWorkout = input.challengeWorkouts.find(
-    (workout) => workout.id === nextBestSession.nextSession.workoutId
+  const nextTrainSession = trainSessions.find(
+    (session) => session.id === nextBestSession.nextSession.workoutId
   );
 
   const supportContent = buildRecommendedSupportContent(
@@ -153,7 +175,9 @@ export function buildRecommendationState(
     nextBestSession.recommendationType,
     continuation.state,
     nextBestSession.nextSession.workoutId,
-    nextWorkout?.training_program_id ?? nextBestSession.nextSession.trainingProgramId ?? null
+    nextTrainSession?.training_program_id ??
+      nextBestSession.nextSession.trainingProgramId ??
+      null
   );
 
   return {
@@ -162,8 +186,12 @@ export function buildRecommendationState(
     messaging,
     supportContent,
     context: {
+      completedTrainCount,
+      totalTrainCount: trainSessions.length,
       completedChallengeCount,
-      totalChallengeCount: input.challengeWorkouts.length,
+      totalChallengeCount: challengeWorkouts.length,
+      activePhaseKey: nextTrainSession?.phase_key ?? null,
+      activePhaseLabel: nextTrainSession?.phase_label ?? null,
     },
   };
 }

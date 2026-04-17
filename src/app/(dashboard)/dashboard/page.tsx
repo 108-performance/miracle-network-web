@@ -288,51 +288,77 @@ function getContinuationBody({
 }
 
 function getDashboardPrimaryCta(recommendation: RecommendationState) {
-  const primary = recommendation.nextBestSession.primaryCta;
   const nextSession = recommendation.nextBestSession.nextSession;
 
-  if (
-    primary.href === '/dashboard/compete/108-athlete-challenge' &&
-    nextSession.workoutId
-  ) {
+  if (nextSession.pathType === 'train' && nextSession.workoutId) {
     return {
       label:
-        recommendation.context.completedChallengeCount > 0
-          ? 'Continue Session'
-          : 'Start Session',
-      href: nextSession.href,
+        recommendation.nextBestSession.recommendationType === 'start_train_path'
+          ? 'Start Session'
+          : recommendation.nextBestSession.recommendationType === 'resume_train_session'
+            ? 'Resume Session'
+            : 'Continue Session',
+      href: `/dashboard/training/${nextSession.workoutId}/run`,
     };
   }
 
-  return primary;
-}
-
-function getDashboardSecondaryCta(recommendation: RecommendationState) {
-  const secondary = recommendation.nextBestSession.secondaryCta;
-
-  if (secondary.href === '/dashboard') {
+  if (nextSession.pathType === 'challenge') {
     return {
       label: 'View Challenge',
       href: '/dashboard/compete/108-athlete-challenge',
     };
   }
 
-  return secondary;
+  return {
+    label: 'Open Train',
+    href: '/dashboard/training',
+  };
+}
+
+function getDashboardSecondaryCta(recommendation: RecommendationState) {
+  const nextSession = recommendation.nextBestSession.nextSession;
+
+  if (nextSession.pathType === 'train') {
+    return {
+      label: 'View Train',
+      href: '/dashboard/training',
+    };
+  }
+
+  if (nextSession.pathType === 'challenge') {
+    return {
+      label: 'View Train',
+      href: '/dashboard/training',
+    };
+  }
+
+  return {
+    label: 'View Challenge',
+    href: '/dashboard/compete/108-athlete-challenge',
+  };
 }
 
 function getHeroSupportLabel(recommendation: RecommendationState) {
-  const { messaging, nextBestSession, continuation, context } = recommendation;
+  const { messaging, nextBestSession, context } = recommendation;
 
   if (messaging.supportLabel?.trim()) {
     return messaging.supportLabel;
   }
 
-  if (nextBestSession.nextSession.dayOrder != null) {
-    return `Next up: Day ${nextBestSession.nextSession.dayOrder}`;
+  if (nextBestSession.nextSession.phaseLabel && nextBestSession.nextSession.sessionOrder) {
+    return `${nextBestSession.nextSession.phaseLabel} • Session ${nextBestSession.nextSession.sessionOrder}`;
   }
 
-  if (continuation.hasCompletedAnySession) {
-    return `${context.completedChallengeCount} / ${context.totalChallengeCount} challenge sessions completed`;
+  if (nextBestSession.nextSession.phaseLabel) {
+    return nextBestSession.nextSession.phaseLabel;
+  }
+
+  if (nextBestSession.nextSession.dayOrder != null) {
+    return `Next up: Challenge Day ${nextBestSession.nextSession.dayOrder}`;
+  }
+
+  if (context.completedTrainCount > 0) {
+    return `${context.completedTrainCount} / ${context.totalTrainCount} train sessions completed`;
   }
 
   return 'No completed sessions yet';
@@ -374,19 +400,26 @@ export default async function DashboardPage() {
               </p>
 
               <h2 className="mt-5 max-w-2xl text-3xl font-extrabold leading-tight text-white sm:text-5xl">
-                Start closing your rings.
+                Start your Train path.
               </h2>
 
               <p className="mt-3 max-w-2xl text-base text-zinc-300 sm:text-lg">
-                Build anchored, dynamic, and game skill work this week.
+                Build momentum one session at a time.
               </p>
 
-              <div className="mt-6">
+              <div className="mt-6 flex flex-wrap gap-3">
                 <Link
-                  href="/dashboard/compete/108-athlete-challenge"
+                  href="/dashboard/training"
                   className="inline-flex items-center justify-center rounded-2xl bg-lime-400 px-6 py-3 text-sm font-bold text-black shadow-[0_0_20px_rgba(132,204,22,0.25)] transition hover:opacity-90"
                 >
-                  Continue Training
+                  Start Training
+                </Link>
+
+                <Link
+                  href="/dashboard/compete/108-athlete-challenge"
+                  className="inline-flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-3 text-sm font-semibold text-zinc-200 transition hover:bg-white/[0.05]"
+                >
+                  View Challenge
                 </Link>
               </div>
             </div>
@@ -422,9 +455,10 @@ export default async function DashboardPage() {
 
   const recommendation = buildRecommendationState({
     completedLogs: dashboardData.completedLogs,
+    trainSessions: dashboardData.trainSessions,
     challengeWorkouts: dashboardData.challengeWorkouts,
     currentWorkoutId: null,
-    currentPathType: 'unknown',
+    currentPathType: 'train',
     supportContentCandidates: dashboardData.supportContentCandidates,
   });
 
@@ -450,7 +484,7 @@ export default async function DashboardPage() {
 
   const lastSessionReflection =
     recommendation.continuation.state === 'new'
-      ? 'Start your first session to begin tracking progress.'
+      ? 'Start your first Train session to begin tracking progress.'
       : recommendation.continuation.daysSinceLastSession === 0
         ? 'You completed this session today.'
         : recommendation.continuation.daysSinceLastSession === 1

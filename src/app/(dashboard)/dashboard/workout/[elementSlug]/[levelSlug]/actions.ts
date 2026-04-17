@@ -2,11 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { buildRecommendationState } from '@/core/protected/recommendation/buildRecommendationState';
-import type {
-  ChallengeWorkoutRow,
-  CompletedLogRow,
-  ContinuationPathType,
-} from '@/core/protected/recommendation/types';
+import type { CompletedLogRow } from '@/core/protected/recommendation/types';
 import { createClient } from '@/lib/supabase/server';
 
 type ExerciseLogInput = {
@@ -27,7 +23,41 @@ type SaveWorkoutSessionInput = {
   exercises: ExerciseLogInput[];
 };
 
-const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
+type TrainingProgramRow = {
+  id: string;
+  title: string | null;
+  app_lane: 'train' | 'compete' | 'workout' | null;
+  is_active: boolean | null;
+  sort_order: number | null;
+};
+
+type WorkoutWithProgramRow = {
+  id: string;
+  title: string | null;
+  day_order: number | null;
+  training_program_id: string | null;
+  training_programs:
+    | {
+        id: string;
+        title: string | null;
+        app_lane: 'train' | 'compete' | 'workout' | null;
+        sort_order: number | null;
+      }
+    | {
+        id: string;
+        title: string | null;
+        app_lane: 'train' | 'compete' | 'workout' | null;
+        sort_order: number | null;
+      }[]
+    | null;
+};
+
+const PHASES = [
+  { key: 'foundational', label: 'Foundational' },
+  { key: 'engine_build', label: 'Engine Build' },
+  { key: 'ball_strike', label: 'Ball Strike' },
+  { key: 'adaptability', label: 'Adaptability' },
+] as const;
 
 function toNumberOrNull(value?: string) {
   if (!value || value.trim() === '') return null;
@@ -37,6 +67,22 @@ function toNumberOrNull(value?: string) {
 
 function buildSessionCompleteRedirectUrl(workoutLogId: string) {
   return `/dashboard/session-complete?workoutLogId=${encodeURIComponent(workoutLogId)}`;
+}
+
+function getLinkedProgram(
+  trainingPrograms:
+    | WorkoutWithProgramRow['training_programs']
+    | undefined
+    | null
+): TrainingProgramRow | null {
+  if (!trainingPrograms) return null;
+  if (Array.isArray(trainingPrograms)) return (trainingPrograms[0] as TrainingProgramRow) ?? null;
+  return trainingPrograms as TrainingProgramRow;
+}
+
+function getPhaseByIndex(index: number) {
+  const bucket = Math.floor(index / 24);
+  return PHASES[Math.min(bucket, PHASES.length - 1)];
 }
 
 export async function saveWorkoutSessionAction(
@@ -219,28 +265,143 @@ export async function saveWorkoutSessionAction(
     throw new Error('Failed to load completed workout history.');
   }
 
-  const { data: challengeWorkoutRows, error: challengeWorkoutRowsError } =
-    await supabase
+  const { data: competePrograms, error: competeProgramsError } = await supabase
+    .from('training_programs')
+    .select('id, title, app_lane, sort_order')
+    .eq('app_lane', 'compete')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+
+  if (competeProgramsError) {
+    console.error('compete programs error:', competeProgramsError);
+    throw new Error('Failed to load compete programs.');
+  }
+
+  const competeProgramIds = (competePrograms ?? []).map((program) => program.id);
+
+  let challengeWorkouts: {
+    id: string;
+    title: string | null;
+    day_order: number | null;
+    training_program_id?: string | null;
+  }[] = [];
+
+  if (competeProgramIds.length > 0) {
+    const { data: competeWorkouts, error: competeWorkoutsError } = await supabase
       .from('workouts')
-      .select('id, title, day_order')
-      .eq('training_program_id', CHALLENGE_PROGRAM_ID)
+      .select('id, title, day_order, training_program_id')
+      .in('training_program_id', competeProgramIds)
+      .order('training_program_id', { ascending: true })
       .order('day_order', { ascending: true });
 
-  if (challengeWorkoutRowsError) {
-    console.error('challenge workouts error:', challengeWorkoutRowsError);
-    throw new Error('Failed to load challenge workouts.');
+    if (competeWorkoutsError) {
+      console.error('compete workouts error:', competeWorkoutsError);
+      throw new Error('Failed to load compete workouts.');
+    }
+
+    challengeWorkouts = competeWorkouts ?? [];
+  }
+
+  const { data: trainPrograms, error: trainProgramsError } = await supabase
+    .from('training_programs')
+    .select('id, title, app_lane, sort_order')
+    .eq('app_lane', 'train')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+
+  if (trainProgramsError) {
+    console.error('train programs error:', trainProgramsError);
+    throw new Error('Failed to load train programs.');
+  }
+
+  const trainProgramIds = (trainPrograms ?? []).map((program) => program.id);
+
+  let trainSessions: {
+    id: string;
+    title: string | null;
+    session_order: number;
+    phase_key: 'foundational' | 'engine_build' | 'ball_strike' | 'adaptability';
+    phase_label: string;
+    training_program_id: string | null;
+    estimated_minutes: number | null;
+  }[] = [];
+
+  if (trainProgramIds.length > 0) {
+    const { data: trainWorkouts, error: trainWorkoutsError } = await supabase
+      .from('workouts')
+      .select(
+        `
+        id,
+        title,
+        day_order,
+        training_program_id,
+        training_programs:training_program_id (
+          id,
+          title,
+          app_lane,
+          sort_order
+        )
+      `
+      )
+      .in('training_program_id', trainProgramIds)
+      .order('training_program_id', { ascending: true })
+      .order('day_order', { ascending: true });
+
+    if (trainWorkoutsError) {
+      console.error('train workouts error:', trainWorkoutsError);
+      throw new Error('Failed to load train workouts.');
+    }
+
+    const sortedTrainWorkouts = ((trainWorkouts ?? []) as WorkoutWithProgramRow[]).sort(
+      (a, b) => {
+        const programA = getLinkedProgram(a.training_programs);
+        const programB = getLinkedProgram(b.training_programs);
+
+        const sortA = programA?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        const sortB = programB?.sort_order ?? Number.MAX_SAFE_INTEGER;
+
+        if (sortA !== sortB) return sortA - sortB;
+
+        const dayA = a.day_order ?? Number.MAX_SAFE_INTEGER;
+        const dayB = b.day_order ?? Number.MAX_SAFE_INTEGER;
+
+        return dayA - dayB;
+      }
+    );
+
+    trainSessions = sortedTrainWorkouts.map((workout, index) => {
+      const phase = getPhaseByIndex(index);
+
+      return {
+        id: workout.id,
+        title: workout.title,
+        session_order: index + 1,
+        phase_key: phase.key,
+        phase_label: phase.label,
+        training_program_id: workout.training_program_id,
+        estimated_minutes: null,
+      };
+    });
   }
 
   const completedLogs = (completedWorkoutLogs ?? []) as CompletedLogRow[];
-  const challengeWorkouts = (challengeWorkoutRows ?? []) as ChallengeWorkoutRow[];
 
-  const currentPathType: ContinuationPathType =
-    currentWorkout.training_program_id === CHALLENGE_PROGRAM_ID
-      ? 'challenge'
-      : 'workout';
+  const currentProgram = (trainPrograms ?? [])
+    .concat(competePrograms ?? [])
+    .find((program) => program.id === currentWorkout.training_program_id);
+
+  const currentPathType =
+    currentProgram?.app_lane === 'train'
+      ? 'train'
+      : currentProgram?.app_lane === 'compete'
+        ? 'challenge'
+        : 'workout';
 
   const recommendation = buildRecommendationState({
     completedLogs,
+    trainSessions,
     challengeWorkouts,
     currentWorkoutId: currentWorkout.id,
     currentWorkoutTitle: currentWorkout.title ?? input.workoutTitle,
@@ -249,6 +410,9 @@ export async function saveWorkoutSessionAction(
   });
 
   revalidatePath('/dashboard');
+  revalidatePath('/dashboard/train');
+  revalidatePath('/dashboard/training');
+  revalidatePath('/dashboard/compete');
   revalidatePath('/dashboard/workout');
   revalidatePath(`/dashboard/workout/${input.elementSlug}/${input.levelSlug}`);
   revalidatePath(`/dashboard/training/${input.workoutId}/run`);
