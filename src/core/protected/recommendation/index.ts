@@ -5,6 +5,7 @@ export { buildRecommendationState } from './buildRecommendationState';
 
 export type {
   CompletedLogRow,
+  GuidedTrainSessionRow,
   ChallengeWorkoutRow,
   ContinuationPathType,
   ContinuationStateResult,

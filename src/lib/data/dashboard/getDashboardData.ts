@@ -1,7 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
 
-const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
-
 type CompletedLogRow = {
   completed_at: string;
   workout_id: string | null;
@@ -12,6 +10,16 @@ type ChallengeWorkoutRow = {
   title: string | null;
   day_order: number | null;
   training_program_id: string | null;
+};
+
+type TrainSessionRow = {
+  id: string;
+  title: string | null;
+  session_order: number;
+  phase_key: 'foundational' | 'engine_build' | 'ball_strike' | 'adaptability';
+  phase_label: string;
+  training_program_id: string | null;
+  estimated_minutes: number | null;
 };
 
 type ExerciseLogRow = {
@@ -36,6 +44,57 @@ type MovementRow = {
   id: string;
   name: string | null;
 };
+
+type ProgramRow = {
+  id: string;
+  title: string | null;
+  app_lane: 'train' | 'compete' | 'workout' | null;
+  sort_order: number | null;
+};
+
+type WorkoutWithProgramRow = {
+  id: string;
+  title: string | null;
+  day_order: number | null;
+  training_program_id: string | null;
+  training_programs:
+    | {
+        id: string;
+        title: string | null;
+        app_lane: 'train' | 'compete' | 'workout' | null;
+        sort_order: number | null;
+      }
+    | {
+        id: string;
+        title: string | null;
+        app_lane: 'train' | 'compete' | 'workout' | null;
+        sort_order: number | null;
+      }[]
+    | null;
+};
+
+const PHASES = [
+  { key: 'foundational', label: 'Foundational' },
+  { key: 'engine_build', label: 'Engine Build' },
+  { key: 'ball_strike', label: 'Ball Strike' },
+  { key: 'adaptability', label: 'Adaptability' },
+] as const;
+
+function getLinkedProgram(
+  trainingPrograms:
+    | WorkoutWithProgramRow['training_programs']
+    | undefined
+    | null
+): ProgramRow | null {
+  if (!trainingPrograms) return null;
+  if (Array.isArray(trainingPrograms)) return (trainingPrograms[0] as ProgramRow) ?? null;
+  return trainingPrograms as ProgramRow;
+}
+
+function getPhaseByIndex(index: number) {
+  const bucket = Math.floor(index / 24);
+  return PHASES[Math.min(bucket, PHASES.length - 1)];
+}
 
 export async function getDashboardData(userId: string) {
   const supabase = await createClient();
@@ -75,15 +134,108 @@ export async function getDashboardData(userId: string) {
     console.error('DASHBOARD completedLogsError', completedLogsError);
   }
 
-  const { data: challengeWorkouts, error: challengeWorkoutsError } =
-    await supabase
+  const { data: competePrograms, error: competeProgramsError } = await supabase
+    .from('training_programs')
+    .select('id, title, app_lane, sort_order')
+    .eq('app_lane', 'compete')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+
+  if (competeProgramsError) {
+    console.error('DASHBOARD competeProgramsError', competeProgramsError);
+  }
+
+  const competeProgramIds = (competePrograms ?? []).map((program) => program.id);
+
+  let challengeWorkouts: ChallengeWorkoutRow[] = [];
+
+  if (competeProgramIds.length > 0) {
+    const { data: competeWorkouts, error: competeWorkoutsError } = await supabase
       .from('workouts')
       .select('id, title, day_order, training_program_id')
-      .eq('training_program_id', CHALLENGE_PROGRAM_ID)
+      .in('training_program_id', competeProgramIds)
+      .order('training_program_id', { ascending: true })
       .order('day_order', { ascending: true });
 
-  if (challengeWorkoutsError) {
-    console.error('DASHBOARD challengeWorkoutsError', challengeWorkoutsError);
+    if (competeWorkoutsError) {
+      console.error('DASHBOARD competeWorkoutsError', competeWorkoutsError);
+    }
+
+    challengeWorkouts = (competeWorkouts ?? []) as ChallengeWorkoutRow[];
+  }
+
+  const { data: trainPrograms, error: trainProgramsError } = await supabase
+    .from('training_programs')
+    .select('id, title, app_lane, sort_order')
+    .eq('app_lane', 'train')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+
+  if (trainProgramsError) {
+    console.error('DASHBOARD trainProgramsError', trainProgramsError);
+  }
+
+  const trainProgramIds = (trainPrograms ?? []).map((program) => program.id);
+
+  let trainSessions: TrainSessionRow[] = [];
+
+  if (trainProgramIds.length > 0) {
+    const { data: trainWorkouts, error: trainWorkoutsError } = await supabase
+      .from('workouts')
+      .select(
+        `
+        id,
+        title,
+        day_order,
+        training_program_id,
+        training_programs:training_program_id (
+          id,
+          title,
+          app_lane,
+          sort_order
+        )
+      `
+      )
+      .in('training_program_id', trainProgramIds)
+      .order('training_program_id', { ascending: true })
+      .order('day_order', { ascending: true });
+
+    if (trainWorkoutsError) {
+      console.error('DASHBOARD trainWorkoutsError', trainWorkoutsError);
+    }
+
+    const sortedTrainWorkouts = ((trainWorkouts ?? []) as WorkoutWithProgramRow[]).sort(
+      (a, b) => {
+        const programA = getLinkedProgram(a.training_programs);
+        const programB = getLinkedProgram(b.training_programs);
+
+        const sortA = programA?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        const sortB = programB?.sort_order ?? Number.MAX_SAFE_INTEGER;
+
+        if (sortA !== sortB) return sortA - sortB;
+
+        const dayA = a.day_order ?? Number.MAX_SAFE_INTEGER;
+        const dayB = b.day_order ?? Number.MAX_SAFE_INTEGER;
+
+        return dayA - dayB;
+      }
+    );
+
+    trainSessions = sortedTrainWorkouts.map((workout, index) => {
+      const phase = getPhaseByIndex(index);
+
+      return {
+        id: workout.id,
+        title: workout.title,
+        session_order: index + 1,
+        phase_key: phase.key,
+        phase_label: phase.label,
+        training_program_id: workout.training_program_id,
+        estimated_minutes: null,
+      };
+    });
   }
 
   const thirtyDaysAgo = new Date();
@@ -171,7 +323,6 @@ export async function getDashboardData(userId: string) {
   }
 
   const normalizedCompletedLogs = (completedLogs ?? []) as CompletedLogRow[];
-  const challengeWorkoutRows = (challengeWorkouts ?? []) as ChallengeWorkoutRow[];
   const exerciseVariantRows = (exerciseVariants ?? []) as ExerciseVariantRow[];
   const movementRows = (movements ?? []) as MovementRow[];
 
@@ -191,7 +342,7 @@ export async function getDashboardData(userId: string) {
     })
   );
 
-  let latestWorkoutTitle = '108 Athlete Challenge Session';
+  let latestWorkoutTitle = 'Train Session';
 
   const latestWorkoutLog =
     normalizedCompletedLogs.length > 0
@@ -202,25 +353,33 @@ export async function getDashboardData(userId: string) {
       : null;
 
   if (latestWorkoutLog?.workout_id) {
-    const matchingChallengeWorkout = challengeWorkoutRows.find(
+    const matchingTrainWorkout = trainSessions.find(
       (workout) => workout.id === latestWorkoutLog.workout_id
     );
 
-    if (matchingChallengeWorkout?.title) {
-      latestWorkoutTitle = matchingChallengeWorkout.title;
+    if (matchingTrainWorkout?.title) {
+      latestWorkoutTitle = matchingTrainWorkout.title;
     } else {
-      const { data: workoutRow, error: workoutTitleError } = await supabase
-        .from('workouts')
-        .select('id, title')
-        .eq('id', latestWorkoutLog.workout_id)
-        .maybeSingle();
+      const matchingChallengeWorkout = challengeWorkouts.find(
+        (workout) => workout.id === latestWorkoutLog.workout_id
+      );
 
-      if (workoutTitleError) {
-        console.error('DASHBOARD workoutTitleError', workoutTitleError);
-      }
+      if (matchingChallengeWorkout?.title) {
+        latestWorkoutTitle = matchingChallengeWorkout.title;
+      } else {
+        const { data: workoutRow, error: workoutTitleError } = await supabase
+          .from('workouts')
+          .select('id, title')
+          .eq('id', latestWorkoutLog.workout_id)
+          .maybeSingle();
 
-      if (workoutRow?.title) {
-        latestWorkoutTitle = workoutRow.title;
+        if (workoutTitleError) {
+          console.error('DASHBOARD workoutTitleError', workoutTitleError);
+        }
+
+        if (workoutRow?.title) {
+          latestWorkoutTitle = workoutRow.title;
+        }
       }
     }
   }
@@ -229,7 +388,8 @@ export async function getDashboardData(userId: string) {
     athleteName,
     latestScore: latestScore?.score ?? null,
     completedLogs: normalizedCompletedLogs,
-    challengeWorkouts: challengeWorkoutRows,
+    trainSessions,
+    challengeWorkouts,
     weeklyExerciseLogs: weeklyExerciseLogRows,
     exerciseVariants: exerciseVariantRows,
     movements: movementRows,

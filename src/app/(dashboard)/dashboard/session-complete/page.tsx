@@ -1,11 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { buildRecommendationState } from '@/core/protected/recommendation/buildRecommendationState';
-import type {
-  ChallengeWorkoutRow,
-  CompletedLogRow,
-  ContinuationPathType,
-} from '@/core/protected/recommendation/types';
+import type { CompletedLogRow } from '@/core/protected/recommendation/types';
 import { createClient } from '@/lib/supabase/server';
 
 type SearchParams = {
@@ -19,7 +15,41 @@ type SessionMetricSummary = {
   change: number | null;
 };
 
-const CHALLENGE_PROGRAM_ID = 'ad7376ba-9746-4c1b-b11d-d7ba245add79';
+type TrainingProgramRow = {
+  id: string;
+  title: string | null;
+  app_lane: 'train' | 'compete' | 'workout' | null;
+  is_active: boolean | null;
+  sort_order: number | null;
+};
+
+type WorkoutWithProgramRow = {
+  id: string;
+  title: string | null;
+  day_order: number | null;
+  training_program_id: string | null;
+  training_programs:
+    | {
+        id: string;
+        title: string | null;
+        app_lane: 'train' | 'compete' | 'workout' | null;
+        sort_order: number | null;
+      }
+    | {
+        id: string;
+        title: string | null;
+        app_lane: 'train' | 'compete' | 'workout' | null;
+        sort_order: number | null;
+      }[]
+    | null;
+};
+
+const PHASES = [
+  { key: 'foundational', label: 'Foundational' },
+  { key: 'engine_build', label: 'Engine Build' },
+  { key: 'ball_strike', label: 'Ball Strike' },
+  { key: 'adaptability', label: 'Adaptability' },
+] as const;
 
 function displayValue(value: number | null | undefined, fallback = '--') {
   if (value == null || Number.isNaN(value)) {
@@ -115,6 +145,22 @@ function extractMetricValue(
   return row.actual_reps ?? null;
 }
 
+function getLinkedProgram(
+  trainingPrograms:
+    | WorkoutWithProgramRow['training_programs']
+    | undefined
+    | null
+): TrainingProgramRow | null {
+  if (!trainingPrograms) return null;
+  if (Array.isArray(trainingPrograms)) return (trainingPrograms[0] as TrainingProgramRow) ?? null;
+  return trainingPrograms as TrainingProgramRow;
+}
+
+function getPhaseByIndex(index: number) {
+  const bucket = Math.floor(index / 24);
+  return PHASES[Math.min(bucket, PHASES.length - 1)];
+}
+
 export default async function SessionCompletePage({
   searchParams,
 }: {
@@ -181,27 +227,139 @@ export default async function SessionCompletePage({
     notFound();
   }
 
-  const { data: challengeWorkoutRows, error: challengeWorkoutRowsError } =
-    await supabase
-      .from('workouts')
-      .select('id, title, day_order')
-      .eq('training_program_id', CHALLENGE_PROGRAM_ID)
-      .order('day_order', { ascending: true });
+  const { data: competePrograms, error: competeProgramsError } = await supabase
+    .from('training_programs')
+    .select('id, title, app_lane, sort_order')
+    .eq('app_lane', 'compete')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
 
-  if (challengeWorkoutRowsError) {
+  if (competeProgramsError) {
     notFound();
   }
 
-  const completedLogs = (completedWorkoutLogs ?? []) as CompletedLogRow[];
-  const challengeWorkouts = (challengeWorkoutRows ?? []) as ChallengeWorkoutRow[];
+  const competeProgramIds = (competePrograms ?? []).map((program) => program.id);
 
-  const currentPathType: ContinuationPathType =
-    workout.training_program_id === CHALLENGE_PROGRAM_ID
-      ? 'challenge'
-      : 'workout';
+  let challengeWorkouts: {
+    id: string;
+    title: string | null;
+    day_order: number | null;
+    training_program_id?: string | null;
+  }[] = [];
+
+  if (competeProgramIds.length > 0) {
+    const { data: competeWorkouts, error: competeWorkoutsError } = await supabase
+      .from('workouts')
+      .select('id, title, day_order, training_program_id')
+      .in('training_program_id', competeProgramIds)
+      .order('training_program_id', { ascending: true })
+      .order('day_order', { ascending: true });
+
+    if (competeWorkoutsError) {
+      notFound();
+    }
+
+    challengeWorkouts = competeWorkouts ?? [];
+  }
+
+  const { data: trainPrograms, error: trainProgramsError } = await supabase
+    .from('training_programs')
+    .select('id, title, app_lane, sort_order')
+    .eq('app_lane', 'train')
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+
+  if (trainProgramsError) {
+    notFound();
+  }
+
+  const trainProgramIds = (trainPrograms ?? []).map((program) => program.id);
+
+  let trainSessions: {
+    id: string;
+    title: string | null;
+    session_order: number;
+    phase_key: 'foundational' | 'engine_build' | 'ball_strike' | 'adaptability';
+    phase_label: string;
+    training_program_id: string | null;
+    estimated_minutes: number | null;
+  }[] = [];
+
+  if (trainProgramIds.length > 0) {
+    const { data: trainWorkouts, error: trainWorkoutsError } = await supabase
+      .from('workouts')
+      .select(
+        `
+        id,
+        title,
+        day_order,
+        training_program_id,
+        training_programs:training_program_id (
+          id,
+          title,
+          app_lane,
+          sort_order
+        )
+      `
+      )
+      .in('training_program_id', trainProgramIds)
+      .order('training_program_id', { ascending: true })
+      .order('day_order', { ascending: true });
+
+    if (trainWorkoutsError) {
+      notFound();
+    }
+
+    const sortedTrainWorkouts = ((trainWorkouts ?? []) as WorkoutWithProgramRow[]).sort(
+      (a, b) => {
+        const programA = getLinkedProgram(a.training_programs);
+        const programB = getLinkedProgram(b.training_programs);
+
+        const sortA = programA?.sort_order ?? Number.MAX_SAFE_INTEGER;
+        const sortB = programB?.sort_order ?? Number.MAX_SAFE_INTEGER;
+
+        if (sortA !== sortB) return sortA - sortB;
+
+        const dayA = a.day_order ?? Number.MAX_SAFE_INTEGER;
+        const dayB = b.day_order ?? Number.MAX_SAFE_INTEGER;
+
+        return dayA - dayB;
+      }
+    );
+
+    trainSessions = sortedTrainWorkouts.map((workoutRow, index) => {
+      const phase = getPhaseByIndex(index);
+
+      return {
+        id: workoutRow.id,
+        title: workoutRow.title,
+        session_order: index + 1,
+        phase_key: phase.key,
+        phase_label: phase.label,
+        training_program_id: workoutRow.training_program_id,
+        estimated_minutes: null,
+      };
+    });
+  }
+
+  const completedLogs = (completedWorkoutLogs ?? []) as CompletedLogRow[];
+
+  const currentProgram = (trainPrograms ?? [])
+    .concat(competePrograms ?? [])
+    .find((program) => program.id === workout.training_program_id);
+
+  const currentPathType =
+    currentProgram?.app_lane === 'train'
+      ? 'train'
+      : currentProgram?.app_lane === 'compete'
+        ? 'challenge'
+        : 'workout';
 
   const recommendation = buildRecommendationState({
     completedLogs,
+    trainSessions,
     challengeWorkouts,
     currentWorkoutId: workout.id,
     currentWorkoutTitle: workout.title ?? 'Workout',
@@ -320,18 +478,53 @@ export default async function SessionCompletePage({
     recommendation.continuation.sessionsThisWeek
   );
 
-  const headline = recommendation.messaging.headline || 'Session complete.';
-  const supportLabel = recommendation.messaging.supportLabel || '';
-  const nextUpHeadline = recommendation.nextBestSession.nextSession.title || '';
-  const nextUpSubtext = recommendation.messaging.subtext || '';
-  const primaryLabel =
-    recommendation.nextBestSession.primaryCta.label || 'Continue';
-  const primaryHref =
-    recommendation.nextBestSession.primaryCta.href || '/dashboard';
-  const secondaryLabel =
-    recommendation.nextBestSession.secondaryCta.label || '';
-  const secondaryHref =
-    recommendation.nextBestSession.secondaryCta.href || '';
+  const isTrainCompletion = currentPathType === 'train';
+  const isCompeteCompletion = currentPathType === 'challenge';
+
+  const headline = isTrainCompletion
+    ? 'Nice work. Your path keeps moving.'
+    : isCompeteCompletion
+      ? 'Nice work. Challenge complete.'
+      : recommendation.messaging.headline || 'Session complete.';
+
+  const supportLabel = isTrainCompletion
+    ? recommendation.nextBestSession.nextSession.phaseLabel
+      ? `${recommendation.nextBestSession.nextSession.phaseLabel} is ready next.`
+      : 'Your next Train session is ready.'
+    : isCompeteCompletion
+      ? 'Head back to Compete when you are ready for the next challenge.'
+      : recommendation.messaging.supportLabel || '';
+
+  const nextUpHeadline = isCompeteCompletion
+    ? 'Back to 108 Athlete Challenge'
+    : recommendation.nextBestSession.nextSession.title || '';
+
+  const nextUpSubtext = isCompeteCompletion
+    ? 'Stay inside the Compete lane and keep your momentum rolling.'
+    : recommendation.messaging.subtext || '';
+
+  const primaryLabel = isTrainCompletion
+    ? 'Continue Train'
+    : isCompeteCompletion
+      ? 'Back to Compete'
+      : recommendation.nextBestSession.primaryCta.label || 'Continue';
+
+  const primaryHref = isTrainCompletion &&
+    recommendation.nextBestSession.nextSession.workoutId
+      ? `/dashboard/training/${recommendation.nextBestSession.nextSession.workoutId}/run`
+      : isCompeteCompletion
+        ? '/dashboard/compete/108-athlete-challenge'
+        : recommendation.nextBestSession.primaryCta.href || '/dashboard';
+
+  const secondaryLabel = isTrainCompletion
+    ? 'Back to Dashboard'
+    : isCompeteCompletion
+      ? 'Back to Dashboard'
+      : recommendation.nextBestSession.secondaryCta.label || '';
+
+  const secondaryHref = isTrainCompletion || isCompeteCompletion
+    ? '/dashboard'
+    : recommendation.nextBestSession.secondaryCta.href || '';
 
   return (
     <main className="min-h-screen bg-black text-white">

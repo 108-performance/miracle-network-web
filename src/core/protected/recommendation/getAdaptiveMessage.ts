@@ -11,37 +11,54 @@ export function getAdaptiveMessage({
   continuation: ContinuationStateResult;
   nextBestSession: NextBestSessionResult;
 }): AdaptiveMessageResult {
-  if (nextBestSession.recommendationType === 'start_challenge') {
+  if (nextBestSession.recommendationType === 'start_train_path') {
     return {
       headline: 'Start your first session.',
-      subtext: 'Build momentum by starting the challenge.',
-      supportLabel: 'Your first step is ready.',
+      subtext: 'Your Train path is ready.',
+      supportLabel:
+        nextBestSession.nextSession.phaseLabel != null
+          ? `Start in ${nextBestSession.nextSession.phaseLabel}.`
+          : 'Your first step is ready.',
     };
   }
 
-  if (nextBestSession.recommendationType === 'continue_challenge') {
+  if (
+    nextBestSession.recommendationType === 'continue_train_path' ||
+    nextBestSession.recommendationType === 'resume_train_session'
+  ) {
     if (continuation.state === 'paused') {
       return {
-        headline: 'Let’s get back on track.',
-        subtext: 'Your next challenge session is ready.',
-        supportLabel: 'Pick up where you left off.',
+        headline: 'Let’s get back in rhythm.',
+        subtext: 'Your next Train session is ready.',
+        supportLabel:
+          nextBestSession.nextSession.phaseLabel != null
+            ? `Continue ${nextBestSession.nextSession.phaseLabel}.`
+            : 'Pick up where you left off.',
       };
     }
 
     return {
       headline: 'Keep your momentum going.',
-      subtext: 'Your next challenge session is ready.',
+      subtext: 'Your next Train session is ready.',
       supportLabel:
-        nextBestSession.nextSession.dayOrder != null
-          ? `Next up: Day ${nextBestSession.nextSession.dayOrder}`
+        nextBestSession.nextSession.sessionOrder != null
+          ? `Next up: Session ${nextBestSession.nextSession.sessionOrder}`
           : 'Your next step is ready.',
+    };
+  }
+
+  if (nextBestSession.recommendationType === 'fallback_to_challenge') {
+    return {
+      headline: 'Your Train path is complete for now.',
+      subtext: 'Challenge is available as your next lane.',
+      supportLabel: 'Compete when you are ready.',
     };
   }
 
   if (continuation.state === 'new') {
     return {
       headline: 'Start your first session.',
-      subtext: 'Your dashboard will guide what comes next after you train.',
+      subtext: 'Train will guide what comes next after you begin.',
       supportLabel: 'No sessions completed yet.',
     };
   }
@@ -49,14 +66,14 @@ export function getAdaptiveMessage({
   if (continuation.state === 'paused') {
     return {
       headline: 'Let’s get moving again.',
-      subtext: 'Return to the dashboard and restart momentum.',
-      supportLabel: 'A quick session today gets you back in rhythm.',
+      subtext: 'A quick session today gets you back in rhythm.',
+      supportLabel: 'Your next Train session is waiting.',
     };
   }
 
   return {
     headline: 'Keep building.',
-    subtext: 'Return to the dashboard and choose your next session.',
+    subtext: 'Your path will keep moving one session at a time.',
     supportLabel: 'Consistency compounds.',
   };
 }

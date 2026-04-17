@@ -3,6 +3,16 @@ export type CompletedLogRow = {
   workout_id: string | null;
 };
 
+export type GuidedTrainSessionRow = {
+  id: string;
+  title: string | null;
+  session_order: number;
+  phase_key: 'foundational' | 'engine_build' | 'ball_strike' | 'adaptability';
+  phase_label: string;
+  training_program_id?: string | null;
+  estimated_minutes?: number | null;
+};
+
 export type ChallengeWorkoutRow = {
   id: string;
   title: string | null;
@@ -11,6 +21,7 @@ export type ChallengeWorkoutRow = {
 };
 
 export type ContinuationPathType =
+  | 'train'
   | 'challenge'
   | 'program'
   | 'workout'
@@ -28,9 +39,10 @@ export type ContinuationStateResult = {
 
 export type NextBestSessionResult = {
   recommendationType:
-    | 'continue_challenge'
-    | 'resume_program'
-    | 'start_challenge'
+    | 'start_train_path'
+    | 'continue_train_path'
+    | 'resume_train_session'
+    | 'fallback_to_challenge'
     | 'return_to_dashboard';
   primaryCta: {
     label: string;
@@ -44,9 +56,13 @@ export type NextBestSessionResult = {
     workoutId: string | null;
     title: string;
     href: string;
-    pathType: 'challenge' | 'program' | 'none';
+    pathType: 'train' | 'challenge' | 'none';
     dayOrder: number | null;
+    sessionOrder?: number | null;
+    phaseKey?: GuidedTrainSessionRow['phase_key'] | null;
+    phaseLabel?: string | null;
     trainingProgramId?: string | null;
+    estimatedMinutes?: number | null;
   };
 };
 
@@ -82,7 +98,8 @@ export type RecommendedSupportContent = {
 
 export type RecommendationInput = {
   completedLogs: CompletedLogRow[];
-  challengeWorkouts: ChallengeWorkoutRow[];
+  trainSessions: GuidedTrainSessionRow[];
+  challengeWorkouts?: ChallengeWorkoutRow[];
   currentWorkoutId?: string | null;
   currentWorkoutTitle?: string | null;
   currentWorkoutDayOrder?: number | null;
@@ -96,7 +113,11 @@ export type RecommendationState = {
   messaging: AdaptiveMessageResult;
   supportContent: RecommendedSupportContent | null;
   context: {
+    completedTrainCount: number;
+    totalTrainCount: number;
     completedChallengeCount: number;
     totalChallengeCount: number;
+    activePhaseKey: GuidedTrainSessionRow['phase_key'] | null;
+    activePhaseLabel: string | null;
   };
 };

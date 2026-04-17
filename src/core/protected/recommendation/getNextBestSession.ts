@@ -2,19 +2,24 @@ import type {
   ChallengeWorkoutRow,
   CompletedLogRow,
   ContinuationPathType,
+  GuidedTrainSessionRow,
   NextBestSessionResult,
 } from './types';
 
 const CHALLENGE_HUB_HREF = '/dashboard/compete/108-athlete-challenge';
 const DASHBOARD_HREF = '/dashboard';
-const WORKOUT_BROWSE_HREF = '/dashboard/workout';
+const TRAIN_HUB_HREF = '/dashboard/training';
 
-function getChallengeRunHref(workoutId: string) {
+function getRunHref(workoutId: string) {
   return `/dashboard/training/${workoutId}/run`;
 }
 
-function sortChallengeWorkouts(workouts: ChallengeWorkoutRow[]) {
-  return [...workouts].sort(
+function sortTrainSessions(sessions?: GuidedTrainSessionRow[] | null) {
+  return [...(sessions ?? [])].sort((a, b) => a.session_order - b.session_order);
+}
+
+function sortChallengeWorkouts(workouts?: ChallengeWorkoutRow[] | null) {
+  return [...(workouts ?? [])].sort(
     (a, b) =>
       (a.day_order ?? Number.MAX_SAFE_INTEGER) -
       (b.day_order ?? Number.MAX_SAFE_INTEGER)
@@ -23,94 +28,118 @@ function sortChallengeWorkouts(workouts: ChallengeWorkoutRow[]) {
 
 export function getNextBestSession({
   completedLogs,
-  challengeWorkouts,
+  trainSessions,
+  challengeWorkouts = [],
   currentWorkoutId,
   currentPathType = 'unknown',
 }: {
   completedLogs: CompletedLogRow[];
-  challengeWorkouts: ChallengeWorkoutRow[];
+  trainSessions?: GuidedTrainSessionRow[] | null;
+  challengeWorkouts?: ChallengeWorkoutRow[] | null;
   currentWorkoutId?: string | null;
   currentPathType?: ContinuationPathType;
 }): NextBestSessionResult {
-  if (!challengeWorkouts.length) {
-    return {
-      recommendationType: 'return_to_dashboard',
-      primaryCta: {
-        label: 'Back to Dashboard',
-        href: DASHBOARD_HREF,
-      },
-      secondaryCta: {
-        label: 'Browse Workouts',
-        href: WORKOUT_BROWSE_HREF,
-      },
-      nextSession: {
-        workoutId: null,
-        title: 'Choose your next workout',
-        href: DASHBOARD_HREF,
-        pathType: 'none',
-        dayOrder: null,
-      },
-    };
-  }
-
+  const sortedTrainSessions = sortTrainSessions(trainSessions);
   const sortedChallengeWorkouts = sortChallengeWorkouts(challengeWorkouts);
+
+  const completedWorkoutIds = new Set(
+    (completedLogs ?? [])
+      .map((log) => log.workout_id)
+      .filter((workoutId): workoutId is string => Boolean(workoutId))
+  );
+
+  const latestWorkoutId =
+    completedLogs && completedLogs.length > 0 ? completedLogs[0].workout_id : null;
+
+  const trainWorkoutIds = new Set(sortedTrainSessions.map((session) => session.id));
   const challengeWorkoutIds = new Set(
     sortedChallengeWorkouts.map((workout) => workout.id)
   );
 
-  const completedChallengeWorkoutIds = new Set(
-    completedLogs
-      .map((log) => log.workout_id)
-      .filter(
-        (workoutId): workoutId is string =>
-          Boolean(workoutId && challengeWorkoutIds.has(workoutId))
-      )
-  );
+  const nextIncompleteTrainSession =
+    sortedTrainSessions.find((session) => !completedWorkoutIds.has(session.id)) ??
+    null;
 
-  const nextIncompleteChallengeWorkout =
-    sortedChallengeWorkouts.find(
-      (workout) => !completedChallengeWorkoutIds.has(workout.id)
-    ) ?? null;
+  const isCurrentWorkoutTrain =
+    (currentWorkoutId ? trainWorkoutIds.has(currentWorkoutId) : false) ||
+    currentPathType === 'train';
 
-  const latestWorkoutId =
-    completedLogs.length > 0 ? completedLogs[0].workout_id : null;
+  if (latestWorkoutId && trainWorkoutIds.has(latestWorkoutId) && isCurrentWorkoutTrain) {
+    const matchingTrainSession =
+      sortedTrainSessions.find((session) => session.id === latestWorkoutId) ?? null;
 
-  if (latestWorkoutId && !challengeWorkoutIds.has(latestWorkoutId)) {
+    if (matchingTrainSession && !completedWorkoutIds.has(matchingTrainSession.id)) {
+      return {
+        recommendationType: 'resume_train_session',
+        primaryCta: {
+          label: 'Resume Session',
+          href: getRunHref(matchingTrainSession.id),
+        },
+        secondaryCta: {
+          label: 'View Path',
+          href: TRAIN_HUB_HREF,
+        },
+        nextSession: {
+          workoutId: matchingTrainSession.id,
+          title: matchingTrainSession.title ?? 'Resume your session',
+          href: getRunHref(matchingTrainSession.id),
+          pathType: 'train',
+          dayOrder: null,
+          sessionOrder: matchingTrainSession.session_order,
+          phaseKey: matchingTrainSession.phase_key,
+          phaseLabel: matchingTrainSession.phase_label,
+          trainingProgramId: matchingTrainSession.training_program_id ?? null,
+          estimatedMinutes: matchingTrainSession.estimated_minutes ?? null,
+        },
+      };
+    }
+  }
+
+  if (nextIncompleteTrainSession) {
+    const completedTrainCount = sortedTrainSessions.filter((session) =>
+      completedWorkoutIds.has(session.id)
+    ).length;
+
     return {
-      recommendationType: 'resume_program',
+      recommendationType:
+        completedTrainCount > 0 || isCurrentWorkoutTrain
+          ? 'continue_train_path'
+          : 'start_train_path',
       primaryCta: {
-        label: 'Resume Training',
-        href: `/dashboard/training/${latestWorkoutId}/run`,
+        label:
+          completedTrainCount > 0 || isCurrentWorkoutTrain
+            ? 'Continue Session'
+            : 'Start Session',
+        href: getRunHref(nextIncompleteTrainSession.id),
       },
       secondaryCta: {
-        label: 'Back to Dashboard',
-        href: DASHBOARD_HREF,
+        label: 'View Path',
+        href: TRAIN_HUB_HREF,
       },
       nextSession: {
-        workoutId: latestWorkoutId,
-        title: 'Resume your last session',
-        href: `/dashboard/training/${latestWorkoutId}/run`,
-        pathType: 'program',
+        workoutId: nextIncompleteTrainSession.id,
+        title: nextIncompleteTrainSession.title ?? 'Next Train Session',
+        href: getRunHref(nextIncompleteTrainSession.id),
+        pathType: 'train',
         dayOrder: null,
+        sessionOrder: nextIncompleteTrainSession.session_order,
+        phaseKey: nextIncompleteTrainSession.phase_key,
+        phaseLabel: nextIncompleteTrainSession.phase_label,
+        trainingProgramId: nextIncompleteTrainSession.training_program_id ?? null,
+        estimatedMinutes: nextIncompleteTrainSession.estimated_minutes ?? null,
       },
     };
   }
 
-  const isCurrentWorkoutChallenge =
-    (currentWorkoutId ? challengeWorkoutIds.has(currentWorkoutId) : false) ||
-    currentPathType === 'challenge';
+  const nextIncompleteChallengeWorkout =
+    sortedChallengeWorkouts.find((workout) => !completedWorkoutIds.has(workout.id)) ??
+    null;
 
   if (nextIncompleteChallengeWorkout) {
     return {
-      recommendationType:
-        completedChallengeWorkoutIds.size > 0 || isCurrentWorkoutChallenge
-          ? 'continue_challenge'
-          : 'start_challenge',
+      recommendationType: 'fallback_to_challenge',
       primaryCta: {
-        label:
-          completedChallengeWorkoutIds.size > 0 || isCurrentWorkoutChallenge
-            ? 'Continue Challenge'
-            : 'Start Challenge',
+        label: 'View Challenge',
         href: CHALLENGE_HUB_HREF,
       },
       secondaryCta: {
@@ -124,9 +153,14 @@ export function getNextBestSession({
           (nextIncompleteChallengeWorkout.day_order != null
             ? `Challenge Day ${nextIncompleteChallengeWorkout.day_order}`
             : 'Next Challenge Session'),
-        href: getChallengeRunHref(nextIncompleteChallengeWorkout.id),
+        href: getRunHref(nextIncompleteChallengeWorkout.id),
         pathType: 'challenge',
         dayOrder: nextIncompleteChallengeWorkout.day_order ?? null,
+        sessionOrder: null,
+        phaseKey: null,
+        phaseLabel: null,
+        trainingProgramId: nextIncompleteChallengeWorkout.training_program_id ?? null,
+        estimatedMinutes: null,
       },
     };
   }
@@ -138,15 +172,20 @@ export function getNextBestSession({
       href: DASHBOARD_HREF,
     },
     secondaryCta: {
-      label: 'Browse Workouts',
-      href: WORKOUT_BROWSE_HREF,
+      label: 'View Train',
+      href: TRAIN_HUB_HREF,
     },
     nextSession: {
       workoutId: null,
-      title: 'Choose your next workout',
+      title: 'No session available',
       href: DASHBOARD_HREF,
       pathType: 'none',
       dayOrder: null,
+      sessionOrder: null,
+      phaseKey: null,
+      phaseLabel: null,
+      trainingProgramId: null,
+      estimatedMinutes: null,
     },
   };
 }
