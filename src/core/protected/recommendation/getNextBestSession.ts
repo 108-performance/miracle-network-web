@@ -4,6 +4,7 @@ import type {
   ContinuationPathType,
   GuidedTrainSessionRow,
   NextBestSessionResult,
+  RecommendedSessionMeta,
 } from './types';
 
 const CHALLENGE_HUB_HREF = '/dashboard/compete/108-athlete-challenge';
@@ -24,6 +25,25 @@ function sortChallengeWorkouts(workouts?: ChallengeWorkoutRow[] | null) {
       (a.day_order ?? Number.MAX_SAFE_INTEGER) -
       (b.day_order ?? Number.MAX_SAFE_INTEGER)
   );
+}
+
+function buildTrainSessionMeta(
+  session: GuidedTrainSessionRow | null
+): RecommendedSessionMeta | null {
+  if (!session) return null;
+
+  return {
+    workoutId: session.id,
+    title: session.title ?? 'Next Train Session',
+    href: getRunHref(session.id),
+    pathType: 'train',
+    dayOrder: null,
+    sessionOrder: session.session_order,
+    phaseKey: session.phase_key,
+    phaseLabel: session.phase_label,
+    trainingProgramId: session.training_program_id ?? null,
+    estimatedMinutes: session.estimated_minutes ?? null,
+  };
 }
 
 export function getNextBestSession({
@@ -56,9 +76,18 @@ export function getNextBestSession({
     sortedChallengeWorkouts.map((workout) => workout.id)
   );
 
+  const nextIncompleteTrainIndex = sortedTrainSessions.findIndex(
+    (session) => !completedWorkoutIds.has(session.id)
+  );
+
   const nextIncompleteTrainSession =
-    sortedTrainSessions.find((session) => !completedWorkoutIds.has(session.id)) ??
-    null;
+    nextIncompleteTrainIndex >= 0 ? sortedTrainSessions[nextIncompleteTrainIndex] : null;
+
+  const secondIncompleteTrainSession =
+    nextIncompleteTrainIndex >= 0 &&
+    nextIncompleteTrainIndex + 1 < sortedTrainSessions.length
+      ? sortedTrainSessions[nextIncompleteTrainIndex + 1]
+      : null;
 
   const isCurrentWorkoutTrain =
     (currentWorkoutId ? trainWorkoutIds.has(currentWorkoutId) : false) ||
@@ -79,18 +108,19 @@ export function getNextBestSession({
           label: 'View Path',
           href: TRAIN_HUB_HREF,
         },
-        nextSession: {
-          workoutId: matchingTrainSession.id,
-          title: matchingTrainSession.title ?? 'Resume your session',
-          href: getRunHref(matchingTrainSession.id),
-          pathType: 'train',
+        nextSession: buildTrainSessionMeta(matchingTrainSession) ?? {
+          workoutId: null,
+          title: 'No session available',
+          href: DASHBOARD_HREF,
+          pathType: 'none',
           dayOrder: null,
-          sessionOrder: matchingTrainSession.session_order,
-          phaseKey: matchingTrainSession.phase_key,
-          phaseLabel: matchingTrainSession.phase_label,
-          trainingProgramId: matchingTrainSession.training_program_id ?? null,
-          estimatedMinutes: matchingTrainSession.estimated_minutes ?? null,
+          sessionOrder: null,
+          phaseKey: null,
+          phaseLabel: null,
+          trainingProgramId: null,
+          estimatedMinutes: null,
         },
+        optionalSecondSession: null,
       };
     }
   }
@@ -116,18 +146,19 @@ export function getNextBestSession({
         label: 'View Path',
         href: TRAIN_HUB_HREF,
       },
-      nextSession: {
-        workoutId: nextIncompleteTrainSession.id,
-        title: nextIncompleteTrainSession.title ?? 'Next Train Session',
-        href: getRunHref(nextIncompleteTrainSession.id),
-        pathType: 'train',
+      nextSession: buildTrainSessionMeta(nextIncompleteTrainSession) ?? {
+        workoutId: null,
+        title: 'No session available',
+        href: DASHBOARD_HREF,
+        pathType: 'none',
         dayOrder: null,
-        sessionOrder: nextIncompleteTrainSession.session_order,
-        phaseKey: nextIncompleteTrainSession.phase_key,
-        phaseLabel: nextIncompleteTrainSession.phase_label,
-        trainingProgramId: nextIncompleteTrainSession.training_program_id ?? null,
-        estimatedMinutes: nextIncompleteTrainSession.estimated_minutes ?? null,
+        sessionOrder: null,
+        phaseKey: null,
+        phaseLabel: null,
+        trainingProgramId: null,
+        estimatedMinutes: null,
       },
+      optionalSecondSession: buildTrainSessionMeta(secondIncompleteTrainSession),
     };
   }
 
@@ -162,6 +193,7 @@ export function getNextBestSession({
         trainingProgramId: nextIncompleteChallengeWorkout.training_program_id ?? null,
         estimatedMinutes: null,
       },
+      optionalSecondSession: null,
     };
   }
 
@@ -187,5 +219,6 @@ export function getNextBestSession({
       trainingProgramId: null,
       estimatedMinutes: null,
     },
+    optionalSecondSession: null,
   };
 }

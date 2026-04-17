@@ -37,6 +37,19 @@ export type ContinuationStateResult = {
   currentPath: ContinuationPathType;
 };
 
+export type RecommendedSessionMeta = {
+  workoutId: string | null;
+  title: string;
+  href: string;
+  pathType: 'train' | 'challenge' | 'none';
+  dayOrder: number | null;
+  sessionOrder?: number | null;
+  phaseKey?: GuidedTrainSessionRow['phase_key'] | null;
+  phaseLabel?: string | null;
+  trainingProgramId?: string | null;
+  estimatedMinutes?: number | null;
+};
+
 export type NextBestSessionResult = {
   recommendationType:
     | 'start_train_path'
@@ -52,18 +65,8 @@ export type NextBestSessionResult = {
     label: string;
     href: string;
   };
-  nextSession: {
-    workoutId: string | null;
-    title: string;
-    href: string;
-    pathType: 'train' | 'challenge' | 'none';
-    dayOrder: number | null;
-    sessionOrder?: number | null;
-    phaseKey?: GuidedTrainSessionRow['phase_key'] | null;
-    phaseLabel?: string | null;
-    trainingProgramId?: string | null;
-    estimatedMinutes?: number | null;
-  };
+  nextSession: RecommendedSessionMeta;
+  optionalSecondSession: RecommendedSessionMeta | null;
 };
 
 export type AdaptiveMessageResult = {

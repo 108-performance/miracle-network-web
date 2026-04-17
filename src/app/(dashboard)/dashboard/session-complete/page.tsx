@@ -480,17 +480,16 @@ export default async function SessionCompletePage({
 
   const isTrainCompletion = currentPathType === 'train';
   const isCompeteCompletion = currentPathType === 'challenge';
+  const secondSession = recommendation.nextBestSession.optionalSecondSession;
 
   const headline = isTrainCompletion
-    ? 'Nice work. Your path keeps moving.'
+    ? 'Nice work. You moved forward today.'
     : isCompeteCompletion
       ? 'Nice work. Challenge complete.'
       : recommendation.messaging.headline || 'Session complete.';
 
   const supportLabel = isTrainCompletion
-    ? recommendation.nextBestSession.nextSession.phaseLabel
-      ? `${recommendation.nextBestSession.nextSession.phaseLabel} is ready next.`
-      : 'Your next Train session is ready.'
+    ? recommendation.messaging.supportLabel
     : isCompeteCompletion
       ? 'Head back to Compete when you are ready for the next challenge.'
       : recommendation.messaging.supportLabel || '';
@@ -516,11 +515,9 @@ export default async function SessionCompletePage({
         ? '/dashboard/compete/108-athlete-challenge'
         : recommendation.nextBestSession.primaryCta.href || '/dashboard';
 
-  const secondaryLabel = isTrainCompletion
+  const secondaryLabel = isTrainCompletion || isCompeteCompletion
     ? 'Back to Dashboard'
-    : isCompeteCompletion
-      ? 'Back to Dashboard'
-      : recommendation.nextBestSession.secondaryCta.label || '';
+    : recommendation.nextBestSession.secondaryCta.label || '';
 
   const secondaryHref = isTrainCompletion || isCompeteCompletion
     ? '/dashboard'
@@ -585,13 +582,37 @@ export default async function SessionCompletePage({
           <p className="mt-2 text-lg font-medium">{progressMessage}</p>
         </section>
 
-        <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+        <section className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs uppercase tracking-wide text-white/45">
             Momentum
           </p>
           <p className="mt-2 text-lg font-medium">{momentumHeadline}</p>
           <p className="mt-1 text-sm text-white/65">{momentumSubtext}</p>
         </section>
+
+        {isTrainCompletion && secondSession?.workoutId ? (
+          <section className="mb-6 rounded-2xl border border-lime-400/20 bg-lime-400/5 p-4">
+            <p className="text-xs uppercase tracking-wide text-lime-300/80">
+              Optional Second Session
+            </p>
+            <p className="mt-2 text-base font-medium text-white">
+              Stack another win if you have time.
+            </p>
+            <p className="mt-1 text-sm text-white/65">
+              {secondSession.title}
+              {secondSession.phaseLabel ? ` • ${secondSession.phaseLabel}` : ''}
+            </p>
+
+            <div className="mt-4">
+              <Link
+                href={`/dashboard/training/${secondSession.workoutId}/run`}
+                className="inline-flex items-center justify-center rounded-2xl border border-lime-400/20 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-lime-200 transition hover:bg-white/[0.05]"
+              >
+                Stack Another Session
+              </Link>
+            </div>
+          </section>
+        ) : null}
 
         {nextUpHeadline || nextUpSubtext ? (
           <section className="mb-8 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
