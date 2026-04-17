@@ -4,6 +4,25 @@ import type {
   NextBestSessionResult,
 } from './types';
 
+function getTrainSupportLabel(nextBestSession: NextBestSessionResult) {
+  if (
+    nextBestSession.nextSession.phaseLabel &&
+    nextBestSession.nextSession.sessionOrder != null
+  ) {
+    return `${nextBestSession.nextSession.phaseLabel} • Session ${nextBestSession.nextSession.sessionOrder}`;
+  }
+
+  if (nextBestSession.nextSession.phaseLabel) {
+    return `${nextBestSession.nextSession.phaseLabel} is ready next.`;
+  }
+
+  if (nextBestSession.nextSession.sessionOrder != null) {
+    return `Next up: Session ${nextBestSession.nextSession.sessionOrder}`;
+  }
+
+  return 'Your next Train session is ready.';
+}
+
 export function getAdaptiveMessage({
   continuation,
   nextBestSession,
@@ -11,6 +30,10 @@ export function getAdaptiveMessage({
   continuation: ContinuationStateResult;
   nextBestSession: NextBestSessionResult;
 }): AdaptiveMessageResult {
+  const hasOptionalSecondSession = Boolean(
+    nextBestSession.optionalSecondSession?.workoutId
+  );
+
   if (nextBestSession.recommendationType === 'start_train_path') {
     return {
       headline: 'Start your first session.',
@@ -29,21 +52,19 @@ export function getAdaptiveMessage({
     if (continuation.state === 'paused') {
       return {
         headline: 'Let’s get back in rhythm.',
-        subtext: 'Your next Train session is ready.',
-        supportLabel:
-          nextBestSession.nextSession.phaseLabel != null
-            ? `Continue ${nextBestSession.nextSession.phaseLabel}.`
-            : 'Pick up where you left off.',
+        subtext: hasOptionalSecondSession
+          ? 'One session gets you moving again. If you want to keep rolling, another is there.'
+          : 'One session gets you moving again. Your next Train session is ready.',
+        supportLabel: getTrainSupportLabel(nextBestSession),
       };
     }
 
     return {
       headline: 'Keep your momentum going.',
-      subtext: 'Your next Train session is ready.',
-      supportLabel:
-        nextBestSession.nextSession.sessionOrder != null
-          ? `Next up: Session ${nextBestSession.nextSession.sessionOrder}`
-          : 'Your next step is ready.',
+      subtext: hasOptionalSecondSession
+        ? 'One session is a strong day. If you have time, you can stack another.'
+        : 'Your next Train session is ready.',
+      supportLabel: getTrainSupportLabel(nextBestSession),
     };
   }
 
